@@ -39,6 +39,7 @@ body {
   position: absolute;
   inset: 0;
   color: var(--ink);
+  font-family: inherit;
   font-size: 17px;
   line-height: 1.6;
   letter-spacing: 0.01em;
@@ -84,6 +85,60 @@ body {
 .app__toggle:focus-visible {
   outline: 1px solid var(--ink);
   outline-offset: 2px;
+}
+
+.render__heading {
+  margin: 16px 0 8px;
+  color: var(--muted);
+}
+
+.render__line {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.render__line--archived {
+  color: var(--muted);
+}
+
+.render__text {
+  flex: 1;
+  white-space: pre-wrap;
+}
+
+.render__checkbox {
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--ink);
+  border-radius: 4px;
+  background: transparent;
+  margin-top: 4px;
+  cursor: pointer;
+}
+
+.render__checkbox--checked {
+  background: var(--ink);
+}
+
+.render__restore {
+  border: 1px solid var(--selection);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  padding: 4px 8px;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.render__bold {
+  font-weight: 600;
+}
+
+.render__italic {
+  font-style: italic;
 }
 
 ::selection {
