@@ -5,6 +5,7 @@ mod storage;
 mod storage_tests;
 
 use serde::Serialize;
+use std::path::Path;
 use tauri::{Manager, Wry, tray::TrayIconEvent};
 
 #[derive(Serialize)]
@@ -49,6 +50,34 @@ mod tray_title_tests {
 
 }
 
+#[cfg(test)]
+mod archive_command_tests {
+    use super::{archive_item_internal, restore_item_internal};
+    use tempfile::tempdir;
+
+    #[test]
+    fn archive_item_internal_rejects_text_mismatch() {
+        let root = tempdir().unwrap();
+        let filename = "2026-01-01.md";
+        std::fs::write(root.path().join(filename), "- one\n").unwrap();
+
+        let result = archive_item_internal(root.path(), filename, 0, "- nope");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn restore_item_internal_moves_line_to_active() {
+        let root = tempdir().unwrap();
+        let filename = "2026-01-01.md";
+        let contents = "- one\n\n## Archived\n- done\n";
+        std::fs::write(root.path().join(filename), contents).unwrap();
+
+        let result = restore_item_internal(root.path(), filename, 0, "- done").unwrap();
+        assert!(result.text.contains("- done"));
+        assert!(!result.text.contains("## Archived\n- done\n"));
+    }
+}
+
 fn toggle_main_window(app: &tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         let is_visible = window.is_visible().unwrap_or(false);
@@ -73,6 +102,38 @@ fn set_window_title(app: &tauri::AppHandle, count: usize) {
     }
 }
 
+fn archive_item_internal(
+    root: &Path,
+    filename: &str,
+    line_idx: usize,
+    line_text: &str,
+) -> Result<ArchiveResult, storage::ArchiveError> {
+    let text = storage::load_or_create(root, filename);
+    let updated = storage::archive_line_matching(&text, line_idx, line_text)?;
+    let counts = storage::save_active_file(root, filename, &updated);
+
+    Ok(ArchiveResult {
+        text: updated,
+        counts,
+    })
+}
+
+fn restore_item_internal(
+    root: &Path,
+    filename: &str,
+    line_idx: usize,
+    line_text: &str,
+) -> Result<ArchiveResult, storage::ArchiveError> {
+    let text = storage::load_or_create(root, filename);
+    let updated = storage::restore_line_matching(&text, line_idx, line_text)?;
+    let counts = storage::save_active_file(root, filename, &updated);
+
+    Ok(ArchiveResult {
+        text: updated,
+        counts,
+    })
+}
+
 #[tauri::command]
 fn get_active_file(app: tauri::AppHandle) -> storage::ActiveFile {
     let root = storage::storage_root();
@@ -92,18 +153,33 @@ fn save_active_file(app: tauri::AppHandle, filename: String, text: String) -> st
 }
 
 #[tauri::command]
-fn archive_item(app: tauri::AppHandle, filename: String, line_idx: usize) -> ArchiveResult {
+fn archive_item(
+    app: tauri::AppHandle,
+    filename: String,
+    line_idx: usize,
+    line_text: String,
+) -> Result<ArchiveResult, String> {
     let root = storage::storage_root();
-    let text = storage::load_or_create(&root, &filename);
-    let updated = storage::archive_line(&text, line_idx);
-    let counts = storage::save_active_file(&root, &filename, &updated);
-    set_tray_title(&app, counts.current);
-    set_window_title(&app, counts.current);
+    let result = archive_item_internal(&root, &filename, line_idx, &line_text)
+        .map_err(|err| format!("archive failed: {:?}", err))?;
+    set_tray_title(&app, result.counts.current);
+    set_window_title(&app, result.counts.current);
+    Ok(result)
+}
 
-    ArchiveResult {
-        text: updated,
-        counts,
-    }
+#[tauri::command]
+fn restore_item(
+    app: tauri::AppHandle,
+    filename: String,
+    line_idx: usize,
+    line_text: String,
+) -> Result<ArchiveResult, String> {
+    let root = storage::storage_root();
+    let result = restore_item_internal(&root, &filename, line_idx, &line_text)
+        .map_err(|err| format!("restore failed: {:?}", err))?;
+    set_tray_title(&app, result.counts.current);
+    set_window_title(&app, result.counts.current);
+    Ok(result)
 }
 
 #[tauri::command]
@@ -144,6 +220,7 @@ pub fn run() {
             get_active_file,
             save_active_file,
             archive_item,
+            restore_item,
             list_files
         ])
         .run(tauri::generate_context!())
