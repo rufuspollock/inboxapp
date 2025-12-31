@@ -1,0 +1,5 @@
+- [ ] want to have 3 different ways To complete a task
+    - processed
+    - ignore / trash
+    - someday
+- [ ] Clean mode (unlike journal) where we just create a new note every time yyyy-mm-dd X where X is autoincrementing number e.g. 1 then 2, etc.

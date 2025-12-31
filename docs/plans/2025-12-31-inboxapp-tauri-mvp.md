@@ -2,13 +2,21 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Build a minimal Tauri macOS app that captures notes in journal/clean modes with editable items, archiving on check, and counts across files.
+**Goal:** Build a minimal Tauri macOS app that captures notes in journal mode with editable items, archiving on check, and counts across files.
 
 **Architecture:** Tauri (Rust backend + vanilla HTML/CSS/TS frontend). Rust owns storage, counting, and file mutation; the UI is a single-pane editor with a list and counts, and communicates via Tauri commands.
 
 **Tech Stack:** Tauri, Rust, TypeScript, Vite (vanilla), macOS.
 
 **Editing Guardrail:** Free edit any line in the active (unprocessed) list.
+
+**Key Design Decisions:**
+- Journal-only for v1: use `YYYY-MM-DD.md`. Clean mode deferred.
+- On open, show today’s file with cursor at the end.
+- Local storage root: `~/.inboxapp`.
+- Checking an item moves it into a hidden `## Archived` section in the same file (not rendered in UI).
+- Counts: current file items + total items across all files + total file count (all shown).
+- Menubar + docked window; menubar toggles the window and shows counts.
 
 ### Task 1: Scaffold Tauri + Vite (vanilla TS)
 
@@ -56,12 +64,6 @@ fn journal_filename_for_today() {
 }
 
 #[test]
-fn clean_filename_increments() {
-    let existing = vec!["2025-12-31 1.md", "2025-12-31 2.md"];
-    assert_eq!(next_clean_filename("2025-12-31", &existing), "2025-12-31 3.md");
-}
-
-#[test]
 fn archive_moves_line_under_archived() {
     let input = "- one\n- two\n\n## Archived\n- old\n";
     let output = archive_line(input, 0);
@@ -82,7 +84,6 @@ Expected: FAIL (helpers not implemented).
 Implement:
 - `storage_root() -> PathBuf` (uses `~/.inboxapp`)
 - `journal_filename(date: &str) -> String`
-- `next_clean_filename(date: &str, existing: &[String]) -> String`
 - `split_archived(text: &str) -> (Vec<String>, Vec<String>)`
 - `archive_line(text: &str, line_idx: usize) -> String`
 - `count_items(text: &str) -> usize`
@@ -129,7 +130,7 @@ Expected: FAIL.
 **Step 3: Implement file IO and Tauri commands**
 
 Add commands:
-- `get_active_file(mode) -> { filename, text, counts }`
+- `get_active_file() -> { filename, text, counts }`
 - `save_active_file(filename, text) -> counts`
 - `archive_item(filename, line_idx) -> { text, counts }`
 - `list_files() -> { files, counts }`
@@ -148,7 +149,7 @@ git add src-tauri/src/main.rs src-tauri/src/storage.rs src-tauri/src/storage_tes
 git commit -m "feat: add tauri commands"
 ```
 
-### Task 4: Build minimal UI (editor + list + counts + mode toggle)
+### Task 4: Build minimal UI (editor + list + counts)
 
 **Files:**
 - Modify: `src/index.html`
@@ -162,9 +163,7 @@ git commit -m "feat: add tauri commands"
   <header>
     <div class="title">Inbox</div>
     <div class="counts" id="counts"></div>
-    <div class="mode">
-      <label><input type="checkbox" id="modeToggle" /> Clean mode</label>
-    </div>
+    <div class="mode">Journal</div>
   </header>
   <main>
     <textarea id="editor"></textarea>
