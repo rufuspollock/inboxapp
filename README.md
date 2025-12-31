@@ -24,14 +24,18 @@ For now, install is developer-only. A packaged installer will come later.
 ### Steps
 ```bash
 npm install
-npm run tauri dev
+npm run dev
 ```
+
+### Scripts
+- `npm run dev` - Run the app in development mode.
+- `npm run build` - Build a macOS installer in `src-tauri/target/release/bundle/`.
 
 ## Develop
 
 ### Run the app
 ```bash
-npm run tauri dev
+npm run dev
 ```
 
 ### Run Rust tests
