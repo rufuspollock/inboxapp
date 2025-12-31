@@ -1,7 +1,6 @@
 :root {
   --bg: #faf9f6;
   --ink: #111111;
-  --muted: #8c8c8c;
   --placeholder: #8c8c8c;
   --selection: #e6e1d7;
 }
@@ -28,121 +27,24 @@ body {
   padding: 56px 24px 64px;
 }
 
-.app__editor-wrap {
-  position: relative;
-  max-width: 720px;
-  margin: 0 auto;
-  min-height: calc(100vh - 140px);
-}
-
-.app__render {
-  position: absolute;
-  inset: 0;
-  color: var(--ink);
-  font-family: inherit;
-  font-size: 17px;
-  line-height: 1.6;
-  letter-spacing: 0.01em;
-  white-space: pre-wrap;
-  word-break: break-word;
-  user-select: none;
-  pointer-events: none;
-  z-index: 2;
-}
-
 .app__editor {
   display: block;
   width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  min-height: calc(100vh - 120px);
   border: none;
   background: transparent;
-  color: transparent;
-  caret-color: var(--ink);
+  color: inherit;
   font-size: 17px;
   line-height: 1.6;
   letter-spacing: 0.01em;
   resize: none;
   outline: none;
-  position: relative;
-  z-index: 1;
 }
 
 .app__editor::placeholder {
   color: var(--placeholder);
-}
-
-.app__toggle {
-  display: block;
-  margin: 24px auto 0;
-  padding: 6px 12px;
-  border: 1px solid var(--selection);
-  border-radius: 999px;
-  background: transparent;
-  color: var(--muted);
-  font-size: 12px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  cursor: pointer;
-}
-
-.app__toggle:focus-visible {
-  outline: 1px solid var(--ink);
-  outline-offset: 2px;
-}
-
-.render__heading {
-  margin: 16px 0 8px;
-  color: var(--muted);
-}
-
-.render__line {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-}
-
-.render__line--archived {
-  color: var(--muted);
-}
-
-.render__text {
-  flex: 1;
-  white-space: pre-wrap;
-}
-
-.render__checkbox {
-  width: 16px;
-  height: 16px;
-  border: 1px solid var(--ink);
-  border-radius: 4px;
-  background: transparent;
-  margin-top: 4px;
-  cursor: pointer;
-  pointer-events: auto;
-}
-
-.render__checkbox--checked {
-  background: var(--ink);
-}
-
-.render__restore {
-  border: 1px solid var(--selection);
-  border-radius: 999px;
-  background: transparent;
-  color: var(--muted);
-  font-size: 11px;
-  letter-spacing: 0.08em;
-  padding: 4px 8px;
-  text-transform: uppercase;
-  cursor: pointer;
-  pointer-events: auto;
-}
-
-.render__bold {
-  font-weight: 600;
-}
-
-.render__italic {
-  font-style: italic;
 }
 
 ::selection {
@@ -154,15 +56,8 @@ body {
     padding: 32px 18px 40px;
   }
 
-  .app__editor-wrap {
-    min-height: calc(100vh - 120px);
-  }
-
-  .app__render {
-    font-size: 16px;
-  }
-
   .app__editor {
     font-size: 16px;
+    min-height: calc(100vh - 84px);
   }
 }
