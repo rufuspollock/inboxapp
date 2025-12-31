@@ -1,5 +1,45 @@
+use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct Counts {
+    pub current: usize,
+    pub total: usize,
+    pub files: usize,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ActiveFile {
+    pub filename: String,
+    pub text: String,
+    pub counts: Counts,
+}
+
+fn counts_for_root(root: &Path, active_filename: &str, active_text: &str) -> Counts {
+    let mut files = list_markdown_files(root);
+    if !files.iter().any(|name| name == active_filename) {
+        files.push(active_filename.to_string());
+        files.sort();
+    }
+
+    let mut total = 0;
+    for name in &files {
+        if name == active_filename {
+            total += count_items(active_text);
+            continue;
+        }
+        let path = root.join(name);
+        if let Ok(text) = std::fs::read_to_string(&path) {
+            total += count_items(&text);
+        }
+    }
+
+    Counts {
+        current: count_items(active_text),
+        total,
+        files: files.len(),
+    }
+}
 pub fn storage_root() -> PathBuf {
     let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
     PathBuf::from(home).join(".inboxapp")
@@ -97,4 +137,36 @@ pub fn list_markdown_files(root: &Path) -> Vec<String> {
     }
     files.sort();
     files
+}
+
+pub fn load_or_create(root: &Path, filename: &str) -> String {
+    let path = root.join(filename);
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    if !path.exists() {
+        let _ = std::fs::write(&path, "");
+        return String::new();
+    }
+    std::fs::read_to_string(&path).unwrap_or_default()
+}
+
+pub fn get_active_file_for_date(root: &Path, date: &str) -> ActiveFile {
+    let _ = std::fs::create_dir_all(root);
+    let filename = journal_filename(date);
+    let text = load_or_create(root, &filename);
+    let counts = counts_for_root(root, &filename, &text);
+
+    ActiveFile {
+        filename,
+        text,
+        counts,
+    }
+}
+
+pub fn save_active_file(root: &Path, filename: &str, text: &str) -> Counts {
+    let _ = std::fs::create_dir_all(root);
+    let path = root.join(filename);
+    let _ = std::fs::write(&path, text);
+    counts_for_root(root, filename, text)
 }
