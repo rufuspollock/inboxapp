@@ -15,12 +15,6 @@ pub struct ActiveFile {
     pub counts: Counts,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ArchiveError {
-    LineNotFound,
-    TextMismatch,
-}
-
 fn counts_for_root(root: &Path, active_filename: &str, active_text: &str) -> Counts {
     let mut files = list_markdown_files(root);
     if !files.iter().any(|name| name == active_filename) {
@@ -118,90 +112,6 @@ pub fn archive_line(text: &str, line_idx: usize) -> String {
     }
 
     out
-}
-
-pub fn archive_line_matching(
-    text: &str,
-    line_idx: usize,
-    line_text: &str,
-) -> Result<String, ArchiveError> {
-    let (mut active, mut archived) = split_archived(text);
-
-    if line_idx >= active.len() {
-        return Err(ArchiveError::LineNotFound);
-    }
-
-    let target_line = active.get(line_idx).cloned().unwrap_or_default();
-    if target_line != line_text {
-        return Err(ArchiveError::TextMismatch);
-    }
-    if target_line.trim().is_empty() {
-        return Err(ArchiveError::LineNotFound);
-    }
-
-    active.remove(line_idx);
-    archived.push(target_line);
-
-    let mut out = String::new();
-    for line in active {
-        out.push_str(&line);
-        out.push('\n');
-    }
-
-    if !archived.is_empty() {
-        if !out.is_empty() {
-            out.push('\n');
-        }
-        out.push_str("## Archived\n");
-        for line in archived {
-            out.push_str(&line);
-            out.push('\n');
-        }
-    }
-
-    Ok(out)
-}
-
-pub fn restore_line_matching(
-    text: &str,
-    line_idx: usize,
-    line_text: &str,
-) -> Result<String, ArchiveError> {
-    let (mut active, mut archived) = split_archived(text);
-
-    if line_idx >= archived.len() {
-        return Err(ArchiveError::LineNotFound);
-    }
-
-    let target_line = archived.get(line_idx).cloned().unwrap_or_default();
-    if target_line != line_text {
-        return Err(ArchiveError::TextMismatch);
-    }
-    if target_line.trim().is_empty() {
-        return Err(ArchiveError::LineNotFound);
-    }
-
-    archived.remove(line_idx);
-    active.push(target_line);
-
-    let mut out = String::new();
-    for line in active {
-        out.push_str(&line);
-        out.push('\n');
-    }
-
-    if !archived.is_empty() {
-        if !out.is_empty() {
-            out.push('\n');
-        }
-        out.push_str("## Archived\n");
-        for line in archived {
-            out.push_str(&line);
-            out.push('\n');
-        }
-    }
-
-    Ok(out)
 }
 
 pub fn count_items(text: &str) -> usize {
