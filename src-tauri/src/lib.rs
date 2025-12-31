@@ -6,7 +6,7 @@ mod storage_tests;
 
 use serde::Serialize;
 use std::path::Path;
-use tauri::{Manager, Wry, tray::TrayIconEvent};
+use tauri::{image::Image, Manager, Wry, tray::TrayIconEvent};
 
 #[derive(Serialize)]
 struct ArchiveResult {
@@ -203,15 +203,23 @@ pub fn run() {
             if let Some(icon) = app.default_window_icon().cloned() {
                 let root = storage::storage_root();
                 let active = storage::get_active_file_for_date(&root, &today_string());
-                tauri::tray::TrayIconBuilder::<Wry>::with_id("main")
-                    .icon(icon)
+                let tray_icon = Image::from_bytes(include_bytes!("../icons/tray-icon.png"))
+                    .map(|image| image.to_owned())
+                    .unwrap_or_else(|_| icon.clone());
+                let mut tray_builder = tauri::tray::TrayIconBuilder::<Wry>::with_id("main")
+                    .icon(tray_icon)
                     .title(format_tray_title(active.counts.current))
                     .on_tray_icon_event(|tray: &tauri::tray::TrayIcon<Wry>, event| {
                         if matches!(event, TrayIconEvent::Click { .. }) {
                             toggle_main_window(&tray.app_handle());
                         }
                     })
-                    .build(app)?;
+                    ;
+                #[cfg(target_os = "macos")]
+                {
+                    tray_builder = tray_builder.icon_as_template(true);
+                }
+                tray_builder.build(app)?;
             }
             Ok(())
         })
