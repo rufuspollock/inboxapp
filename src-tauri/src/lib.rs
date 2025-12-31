@@ -5,6 +5,7 @@ mod storage;
 mod storage_tests;
 
 use serde::Serialize;
+use tauri::{Manager, tray::TrayIconEvent};
 
 #[derive(Serialize)]
 struct ArchiveResult {
@@ -20,6 +21,18 @@ struct FileList {
 
 fn today_string() -> String {
     chrono::Local::now().format("%Y-%m-%d").to_string()
+}
+
+fn toggle_main_window(app: &tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let is_visible = window.is_visible().unwrap_or(false);
+        if is_visible {
+            let _ = window.hide();
+        } else {
+            let _ = window.show();
+            let _ = window.set_focus();
+        }
+    }
 }
 
 #[tauri::command]
@@ -62,6 +75,19 @@ fn list_files() -> FileList {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .setup(|app| {
+            if let Some(icon) = app.default_window_icon().cloned() {
+                tauri::tray::TrayIconBuilder::new()
+                    .icon(icon)
+                    .on_tray_icon_event(|tray, event| {
+                        if matches!(event, TrayIconEvent::Click { .. }) {
+                            toggle_main_window(&tray.app_handle());
+                        }
+                    })
+                    .build(app)?;
+            }
+            Ok(())
+        })
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             get_active_file,
