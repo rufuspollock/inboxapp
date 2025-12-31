@@ -221,3 +221,4 @@ git add src-tauri/tauri.conf.json src-tauri/src/main.rs
 
 git commit -m "feat: add menubar toggle"
 ```
+
