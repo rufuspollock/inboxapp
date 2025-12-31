@@ -46,6 +46,8 @@ body {
   white-space: pre-wrap;
   word-break: break-word;
   user-select: none;
+  pointer-events: none;
+  z-index: 2;
 }
 
 .app__editor {
@@ -115,6 +117,7 @@ body {
   background: transparent;
   margin-top: 4px;
   cursor: pointer;
+  pointer-events: auto;
 }
 
 .render__checkbox--checked {
@@ -131,6 +134,7 @@ body {
   padding: 4px 8px;
   text-transform: uppercase;
   cursor: pointer;
+  pointer-events: auto;
 }
 
 .render__bold {
