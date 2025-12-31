@@ -1,7 +1,56 @@
-# Tauri + Vanilla
+# InboxApp
 
-This template should help get you started developing with Tauri in vanilla HTML, CSS and Javascript.
+Capture without thinking. Process later.
 
-## Recommended IDE Setup
+InboxApp is a hyper-minimal macOS inbox for capturing fleeting thoughts in Markdown with near-zero friction. It is designed to be emptied, not to become another knowledge base.
 
-- [VS Code](https://code.visualstudio.com/) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer)
+## Key Features
+- Single, distraction-free writing surface with raw Markdown.
+- Today-only capture buffer (daily file) with the cursor placed at the end on open.
+- Local, offline storage in human-readable files at `~/.inboxapp`.
+- Ultra-lightweight UI that resembles a blank page (black/white, minimalist).
+- Today’s item count shown in the native window title as `Inbox — N`.
+- No AI, no tagging, no organization: just capture and move on.
+
+## Install (Developer)
+
+For now, install is developer-only. A packaged installer will come later.
+
+### Prerequisites
+- Node.js (with npm)
+- Rust toolchain
+- Tauri prerequisites for macOS (Xcode Command Line Tools)
+
+### Steps
+```bash
+npm install
+npm run tauri dev
+```
+
+## Develop
+
+### Run the app
+```bash
+npm run tauri dev
+```
+
+### Run Rust tests
+```bash
+cargo test
+```
+
+### Project layout
+- `src/` - frontend (HTML/CSS/JS)
+- `src-tauri/` - backend (Rust/Tauri)
+- `~/.inboxapp/` - local storage (daily Markdown files)
+
+## Design Principles
+- Capture only, no processing inside the app.
+- One surface, one action: write.
+- Markdown-first, Obsidian-compatible output.
+- Visually quiet and fast.
+
+## Non-goals
+- Long-term storage or knowledge management.
+- Rich editing, rendered Markdown, or inline formatting.
+- Sync, automation, or AI features.
