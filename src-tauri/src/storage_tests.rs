@@ -1,6 +1,6 @@
 use crate::storage::{
-    archive_line, count_items, get_active_file_for_date, journal_filename, load_or_create,
-    save_active_file,
+    archive_line, archive_line_matching, count_items, get_active_file_for_date, journal_filename,
+    load_or_create, restore_line_matching, save_active_file,
 };
 use tempfile::tempdir;
 
@@ -17,6 +17,30 @@ fn archive_moves_line_under_archived() {
     assert!(output.contains("- two"));
     assert!(output.contains("## Archived"));
     assert!(output.contains("- one"));
+}
+
+#[test]
+fn archive_line_requires_matching_text() {
+    let input = "- one\n- two\n";
+    let result = archive_line_matching(input, 0, "- nope");
+    assert!(result.is_err());
+}
+
+#[test]
+fn archive_line_appends_archived_header_when_missing() {
+    let input = "- one\n- two\n";
+    let output = archive_line_matching(input, 1, "- two").unwrap();
+    assert!(output.contains("## Archived"));
+    assert!(output.contains("- two"));
+}
+
+#[test]
+fn restore_line_moves_item_back_to_active() {
+    let input = "- one\n\n## Archived\n- done\n";
+    let output = restore_line_matching(input, 0, "- done").unwrap();
+    assert!(output.contains("- one"));
+    assert!(output.contains("- done"));
+    assert!(!output.contains("## Archived\n- done\n"));
 }
 
 #[test]
