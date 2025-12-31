@@ -10,12 +10,18 @@
 
   <body>
     <div class="app">
-      <textarea
-        id="editor"
-        class="app__editor"
-        placeholder="Type..."
-        spellcheck="true"
-      ></textarea>
+      <div class="app__editor-wrap">
+        <div id="render" class="app__render" aria-hidden="true"></div>
+        <textarea
+          id="editor"
+          class="app__editor"
+          placeholder="Type..."
+          spellcheck="true"
+        ></textarea>
+      </div>
+      <button id="toggle-archive" class="app__toggle" type="button">
+        Show archived
+      </button>
     </div>
   </body>
 </html>
