@@ -42,6 +42,13 @@ function splitArchived(text) {
 
 function renderLine(line, section, lineIndex) {
   if (section === "archived") {
+    if (line.trim() === "") {
+      return `
+        <div class="render__line render__line--archived" data-section="${section}" data-line-index="${lineIndex}">
+          <span class="render__text">&nbsp;</span>
+        </div>
+      `;
+    }
     const content = formatInline(line);
     return `
       <div class="render__line render__line--archived" data-section="${section}" data-line-index="${lineIndex}">
