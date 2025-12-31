@@ -24,7 +24,8 @@ fn today_string() -> String {
 }
 
 fn format_tray_title(count: usize) -> String {
-    count.to_string()
+    let _ = count;
+    String::new()
 }
 
 #[cfg(test)]
@@ -33,7 +34,7 @@ mod tray_title_tests {
 
     #[test]
     fn formats_count_in_box() {
-        assert_eq!(format_tray_title(7), "7");
+        assert_eq!(format_tray_title(7), "");
     }
 }
 
