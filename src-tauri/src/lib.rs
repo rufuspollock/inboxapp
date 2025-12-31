@@ -28,14 +28,25 @@ fn format_tray_title(count: usize) -> String {
     String::new()
 }
 
+fn format_window_title(count: usize) -> String {
+    format!("Inbox — {}", count)
+}
+
 #[cfg(test)]
 mod tray_title_tests {
     use super::format_tray_title;
+    use super::format_window_title;
 
     #[test]
     fn formats_count_in_box() {
         assert_eq!(format_tray_title(7), "");
     }
+
+    #[test]
+    fn formats_window_title_with_count() {
+        assert_eq!(format_window_title(7), "Inbox — 7");
+    }
+
 }
 
 fn toggle_main_window(app: &tauri::AppHandle) {
@@ -56,11 +67,18 @@ fn set_tray_title(app: &tauri::AppHandle, count: usize) {
     }
 }
 
+fn set_window_title(app: &tauri::AppHandle, count: usize) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.set_title(&format_window_title(count));
+    }
+}
+
 #[tauri::command]
 fn get_active_file(app: tauri::AppHandle) -> storage::ActiveFile {
     let root = storage::storage_root();
     let active = storage::get_active_file_for_date(&root, &today_string());
     set_tray_title(&app, active.counts.current);
+    set_window_title(&app, active.counts.current);
     active
 }
 
@@ -69,6 +87,7 @@ fn save_active_file(app: tauri::AppHandle, filename: String, text: String) -> st
     let root = storage::storage_root();
     let counts = storage::save_active_file(&root, &filename, &text);
     set_tray_title(&app, counts.current);
+    set_window_title(&app, counts.current);
     counts
 }
 
@@ -79,6 +98,7 @@ fn archive_item(app: tauri::AppHandle, filename: String, line_idx: usize) -> Arc
     let updated = storage::archive_line(&text, line_idx);
     let counts = storage::save_active_file(&root, &filename, &updated);
     set_tray_title(&app, counts.current);
+    set_window_title(&app, counts.current);
 
     ArchiveResult {
         text: updated,
@@ -92,6 +112,7 @@ fn list_files(app: tauri::AppHandle) -> FileList {
     let active = storage::get_active_file_for_date(&root, &today_string());
     let files = storage::list_markdown_files(&root);
     set_tray_title(&app, active.counts.current);
+    set_window_title(&app, active.counts.current);
 
     FileList {
         files,
