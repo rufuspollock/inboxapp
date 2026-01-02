@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
+const ITEM_DIVIDER: &str = "---";
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Counts {
     pub current: usize,
@@ -49,77 +51,50 @@ pub fn journal_filename(date: &str) -> String {
     format!("{date}.md")
 }
 
-pub fn split_archived(text: &str) -> (Vec<String>, Vec<String>) {
-    let mut active = Vec::new();
-    let mut archived = Vec::new();
-    let mut in_archived = false;
+pub fn split_items(text: &str) -> Vec<String> {
+    let mut items = Vec::new();
+    let mut current: Vec<&str> = Vec::new();
 
     for line in text.lines() {
-        if line.trim_end() == "## Archived" {
-            in_archived = true;
+        if current.is_empty() && line.trim().is_empty() {
             continue;
         }
-        if in_archived {
-            archived.push(line.to_string());
-        } else {
-            active.push(line.to_string());
+        if line.trim() == ITEM_DIVIDER {
+            let item = current.join("\n").trim_end().to_string();
+            if !item.trim().is_empty() {
+                items.push(item);
+            }
+            current.clear();
+            continue;
         }
+        current.push(line);
     }
 
-    (active, archived)
+    let item = current.join("\n").trim_end().to_string();
+    if !item.trim().is_empty() {
+        items.push(item);
+    }
+
+    items
 }
 
-pub fn archive_line(text: &str, line_idx: usize) -> String {
-    let (mut active, mut archived) = split_archived(text);
-    let mut seen = 0;
-    let mut target = None;
-
-    for (idx, line) in active.iter().enumerate() {
-        if line.trim().is_empty() {
-            continue;
-        }
-        if seen == line_idx {
-            target = Some(idx);
-            break;
-        }
-        seen += 1;
+pub fn append_item_to_text(existing: &str, item: &str) -> String {
+    let item = item.trim_end();
+    if item.trim().is_empty() {
+        return existing.to_string();
     }
 
-    if let Some(idx) = target {
-        let line = active.remove(idx);
-        if !line.trim().is_empty() {
-            archived.push(line);
-        }
-    } else {
-        return text.to_string();
+    let mut out = existing.trim_end().to_string();
+    if !out.is_empty() {
+        out.push_str("\n\n---\n\n");
     }
-
-    let mut out = String::new();
-    for line in active {
-        out.push_str(&line);
-        out.push('\n');
-    }
-
-    if !archived.is_empty() {
-        if !out.is_empty() {
-            out.push('\n');
-        }
-        out.push_str("## Archived\n");
-        for line in archived {
-            out.push_str(&line);
-            out.push('\n');
-        }
-    }
-
+    out.push_str(item);
+    out.push('\n');
     out
 }
 
 pub fn count_items(text: &str) -> usize {
-    let (active, _) = split_archived(text);
-    active
-        .iter()
-        .filter(|line| !line.trim().is_empty())
-        .count()
+    split_items(text).len()
 }
 
 pub fn list_markdown_files(root: &Path) -> Vec<String> {
@@ -169,4 +144,10 @@ pub fn save_active_file(root: &Path, filename: &str, text: &str) -> Counts {
     let path = root.join(filename);
     let _ = std::fs::write(&path, text);
     counts_for_root(root, filename, text)
+}
+
+pub fn append_item(root: &Path, filename: &str, item: &str) -> Counts {
+    let text = load_or_create(root, filename);
+    let updated = append_item_to_text(&text, item);
+    save_active_file(root, filename, &updated)
 }

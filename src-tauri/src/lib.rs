@@ -5,18 +5,18 @@ mod storage;
 mod storage_tests;
 
 use serde::Serialize;
-use std::path::Path;
-use tauri::{image::Image, Manager, Wry, tray::TrayIconEvent};
-
-#[derive(Serialize)]
-struct ArchiveResult {
-    text: String,
-    counts: storage::Counts,
-}
+use tauri::{image::Image, menu::Menu, Manager, Wry, tray::TrayIconEvent};
 
 #[derive(Serialize)]
 struct FileList {
     files: Vec<String>,
+    counts: storage::Counts,
+}
+
+#[derive(Serialize)]
+struct TodayItems {
+    filename: String,
+    items: Vec<String>,
     counts: storage::Counts,
 }
 
@@ -93,21 +93,6 @@ fn save_active_file(app: tauri::AppHandle, filename: String, text: String) -> st
 }
 
 #[tauri::command]
-fn archive_item(app: tauri::AppHandle, filename: String, line_idx: usize) -> ArchiveResult {
-    let root = storage::storage_root();
-    let text = storage::load_or_create(&root, &filename);
-    let updated = storage::archive_line(&text, line_idx);
-    let counts = storage::save_active_file(&root, &filename, &updated);
-    set_tray_title(&app, counts.current);
-    set_window_title(&app, counts.current);
-
-    ArchiveResult {
-        text: updated,
-        counts,
-    }
-}
-
-#[tauri::command]
 fn list_files(app: tauri::AppHandle) -> FileList {
     let root = storage::storage_root();
     let active = storage::get_active_file_for_date(&root, &today_string());
@@ -119,6 +104,34 @@ fn list_files(app: tauri::AppHandle) -> FileList {
         files,
         counts: active.counts,
     }
+}
+
+#[tauri::command]
+fn get_today_items(app: tauri::AppHandle) -> TodayItems {
+    let root = storage::storage_root();
+    let active = storage::get_active_file_for_date(&root, &today_string());
+    let items = storage::split_items(&active.text);
+    set_tray_title(&app, active.counts.current);
+    set_window_title(&app, active.counts.current);
+
+    TodayItems {
+        filename: active.filename,
+        items,
+        counts: active.counts,
+    }
+}
+
+#[tauri::command]
+fn append_today_item(
+    app: tauri::AppHandle,
+    filename: String,
+    text: String,
+) -> storage::Counts {
+    let root = storage::storage_root();
+    let counts = storage::append_item(&root, &filename, &text);
+    set_tray_title(&app, counts.current);
+    set_window_title(&app, counts.current);
+    counts
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -148,12 +161,15 @@ pub fn run() {
             }
             Ok(())
         })
+        .menu(|app| Menu::default(app))
+        .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             get_active_file,
             save_active_file,
-            archive_item,
-            list_files
+            list_files,
+            get_today_items,
+            append_today_item
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
