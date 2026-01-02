@@ -1,6 +1,6 @@
 use crate::storage::{
-    archive_line, count_items, get_active_file_for_date, journal_filename, load_or_create,
-    save_active_file,
+    append_item_to_text, count_items, get_active_file_for_date, journal_filename, load_or_create,
+    save_active_file, split_items,
 };
 use tempfile::tempdir;
 
@@ -8,15 +8,6 @@ use tempfile::tempdir;
 fn journal_filename_for_today() {
     let date = "2025-12-31";
     assert_eq!(journal_filename(date), "2025-12-31.md");
-}
-
-#[test]
-fn archive_moves_line_under_archived() {
-    let input = "- one\n- two\n\n## Archived\n- old\n";
-    let output = archive_line(input, 0);
-    assert!(output.contains("- two"));
-    assert!(output.contains("## Archived"));
-    assert!(output.contains("- one"));
 }
 
 #[test]
@@ -28,8 +19,24 @@ fn load_creates_file_if_missing() {
 }
 
 #[test]
-fn count_items_ignores_archived_section() {
-    let text = "- one\n- two\n\n## Archived\n- old\n";
+fn split_items_uses_markdown_divider() {
+    let text = "first\n\n---\n\nsecond\n";
+    let items = split_items(text);
+    assert_eq!(items, vec!["first", "second"]);
+}
+
+#[test]
+fn append_item_adds_divider() {
+    let first = append_item_to_text("", "first");
+    let second = append_item_to_text(&first, "second");
+    assert!(second.contains("---"));
+    assert!(second.contains("first"));
+    assert!(second.contains("second"));
+}
+
+#[test]
+fn count_items_counts_divided_items() {
+    let text = "first\n\n---\n\nsecond\n";
     assert_eq!(count_items(text), 2);
 }
 
@@ -47,7 +54,7 @@ fn get_active_file_creates_daily_file() {
 #[test]
 fn save_active_file_updates_counts() {
     let root = tempdir().unwrap();
-    let counts = save_active_file(root.path(), "2025-12-31.md", "- one\n- two\n");
+    let counts = save_active_file(root.path(), "2025-12-31.md", "one\n\n---\n\ntwo\n");
     assert_eq!(counts.current, 2);
     assert_eq!(counts.total, 2);
     assert_eq!(counts.files, 1);
