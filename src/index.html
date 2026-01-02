@@ -10,12 +10,30 @@
 
   <body>
     <div class="app">
-      <textarea
-        id="editor"
-        class="app__editor"
-        placeholder="Type..."
-        spellcheck="true"
-      ></textarea>
+      <section class="capture">
+        <textarea
+          id="editor"
+          class="capture__editor"
+          placeholder="Type..."
+          spellcheck="true"
+        ></textarea>
+      </section>
+
+      <section class="drawer" data-state="collapsed">
+        <div class="drawer__header">
+          <button class="drawer__toggle" type="button" id="drawer-toggle">
+            <span class="drawer__title">Today</span>
+            <span class="drawer__count" id="today-count">0</span>
+            <span class="drawer__chevron" aria-hidden="true">▴</span>
+          </button>
+          <button class="drawer__copy" type="button" id="copy-all">
+            Copy all
+          </button>
+        </div>
+        <div class="drawer__panel" id="today-panel">
+          <ul class="drawer__list" id="today-list"></ul>
+        </div>
+      </section>
     </div>
   </body>
 </html>
