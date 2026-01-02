@@ -97,6 +97,24 @@ async function copyText(text) {
   }
 }
 
+async function pasteFromClipboard() {
+  try {
+    const text = await invoke("plugin:clipboard-manager|read_text");
+    if (!text) {
+      return;
+    }
+    const start = editorEl.selectionStart;
+    const end = editorEl.selectionEnd;
+    const value = editorEl.value;
+    editorEl.value = value.slice(0, start) + text + value.slice(end);
+    const cursor = start + text.length;
+    editorEl.setSelectionRange(cursor, cursor);
+  } catch (error) {
+    console.error("clipboard read failed", error);
+    setError("Paste failed");
+  }
+}
+
 async function handleBlur() {
   const rawText = editorEl.value;
   if (!rawText.trim()) {
@@ -162,3 +180,10 @@ copyAllEl.addEventListener("click", () => {
 window.addEventListener("blur", handleBlur);
 window.addEventListener("focus", handleFocus);
 window.addEventListener("DOMContentLoaded", boot);
+editorEl.addEventListener("keydown", (event) => {
+  if (event.metaKey && event.key.toLowerCase() === "v") {
+    event.preventDefault();
+    event.stopPropagation();
+    pasteFromClipboard();
+  }
+});

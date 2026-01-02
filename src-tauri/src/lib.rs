@@ -5,7 +5,7 @@ mod storage;
 mod storage_tests;
 
 use serde::Serialize;
-use tauri::{image::Image, Manager, Wry, tray::TrayIconEvent};
+use tauri::{image::Image, menu::Menu, Manager, Wry, tray::TrayIconEvent};
 
 #[derive(Serialize)]
 struct FileList {
@@ -161,6 +161,8 @@ pub fn run() {
             }
             Ok(())
         })
+        .menu(|app| Menu::default(app))
+        .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             get_active_file,
