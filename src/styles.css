@@ -5,6 +5,7 @@
   --muted-ink: #6b635b;
   --divider: #e1d7ca;
   --accent: #c9b59c;
+  --warning: #a86b2d;
   --selection: #e7ddcf;
 }
 
@@ -114,6 +115,16 @@ body {
   transition: transform 0.2s ease;
 }
 
+.drawer__status {
+  font-size: 11px;
+  color: var(--warning);
+  margin-left: 4px;
+}
+
+.drawer__status:empty {
+  display: none;
+}
+
 .drawer__copy {
   background: transparent;
   border: 1px solid var(--divider);
@@ -129,6 +140,11 @@ body {
   border-color: var(--accent);
   color: var(--ink);
   outline: none;
+}
+
+.drawer__copy:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
 .drawer__panel {
