@@ -3,3 +3,4 @@
     - ignore / trash
     - someday
 - [ ] Clean mode (unlike journal) where we just create a new note every time yyyy-mm-dd X where X is autoincrementing number e.g. 1 then 2, etc.
+- [ ] Create simple titles for each item if a way to do that easily with local tools
