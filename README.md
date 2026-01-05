@@ -6,7 +6,10 @@
 
 InboxApp is a hyper-minimal macOS inbox for capturing fleeting thoughts in Markdown with near-zero friction. It is designed to be emptied, not to become another knowledge base.
 
+📺 Watch the demo https://www.youtube.com/watch?v=JdY6tsNhN30
+
 ## Key Features
+
 - Single, distraction-free writing surface with raw Markdown.
 - Today-only capture buffer (daily file) with the cursor placed at the end on open.
 - Local, offline storage in human-readable files at `~/.inboxapp`.
