@@ -78,7 +78,8 @@ function dateFromFilename(filename) {
 
 function renderList() {
   listEl.textContent = "";
-  state.items.forEach((item) => {
+  const items = state.items.slice().reverse();
+  items.forEach((item) => {
     const row = document.createElement("li");
     row.className = "drawer__item";
 
