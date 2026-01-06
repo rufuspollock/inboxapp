@@ -122,13 +122,9 @@ fn get_today_items(app: tauri::AppHandle) -> TodayItems {
 }
 
 #[tauri::command]
-fn append_today_item(
-    app: tauri::AppHandle,
-    filename: String,
-    text: String,
-) -> storage::Counts {
+fn append_today_item(app: tauri::AppHandle, text: String) -> storage::Counts {
     let root = storage::storage_root();
-    let counts = storage::append_item(&root, &filename, &text);
+    let counts = storage::append_item_for_date(&root, &today_string(), &text);
     set_tray_title(&app, counts.current);
     set_window_title(&app, counts.current);
     counts

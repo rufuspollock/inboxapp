@@ -1,6 +1,6 @@
 use crate::storage::{
-    append_item_to_text, count_items, get_active_file_for_date, journal_filename, load_or_create,
-    save_active_file, split_items,
+    append_item_for_date, append_item_to_text, count_items, get_active_file_for_date,
+    journal_filename, load_or_create, save_active_file, split_items,
 };
 use tempfile::tempdir;
 
@@ -58,4 +58,17 @@ fn save_active_file_updates_counts() {
     assert_eq!(counts.current, 2);
     assert_eq!(counts.total, 2);
     assert_eq!(counts.files, 1);
+}
+
+#[test]
+fn append_item_for_date_writes_to_daily_file() {
+    let root = tempdir().unwrap();
+    let counts = append_item_for_date(root.path(), "2025-12-31", "first");
+    let path = root.path().join("2025-12-31.md");
+
+    assert!(path.exists());
+    assert_eq!(counts.current, 1);
+    assert_eq!(counts.total, 1);
+    assert_eq!(counts.files, 1);
+    assert!(std::fs::read_to_string(path).unwrap().contains("first"));
 }

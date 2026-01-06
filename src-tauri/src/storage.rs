@@ -151,3 +151,8 @@ pub fn append_item(root: &Path, filename: &str, item: &str) -> Counts {
     let updated = append_item_to_text(&text, item);
     save_active_file(root, filename, &updated)
 }
+
+pub fn append_item_for_date(root: &Path, date: &str, item: &str) -> Counts {
+    let filename = journal_filename(date);
+    append_item(root, &filename, item)
+}

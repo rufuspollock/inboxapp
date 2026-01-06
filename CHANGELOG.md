@@ -1,3 +1,7 @@
+### 2026-01-06
+
+- Fix stale daily file writes when the app stays open past midnight; appends now always target today's file.
+
 ### 2026-01-02 — Simplify Interface
 
 - Blank-on-focus capture surface with blur-to-commit flow and Markdown append-only storage per day.

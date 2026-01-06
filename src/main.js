@@ -2,6 +2,7 @@ const { invoke } = window.__TAURI__.core;
 
 const state = {
   filename: "",
+  date: "",
   items: [],
   drawerOpen: false,
   error: null,
@@ -63,6 +64,18 @@ function displayText(item) {
   return item.replace(/\s+/g, " ").trim();
 }
 
+function todayString() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function dateFromFilename(filename) {
+  return filename.replace(/\.md$/, "");
+}
+
 function renderList() {
   listEl.textContent = "";
   state.items.forEach((item) => {
@@ -115,6 +128,27 @@ async function pasteFromClipboard() {
   }
 }
 
+async function refreshTodayIfStale() {
+  const today = todayString();
+  if (state.date === today) {
+    return false;
+  }
+  try {
+    const data = await invoke("get_today_items");
+    state.filename = data.filename;
+    state.date = dateFromFilename(data.filename);
+    state.items = data.items;
+    renderList();
+    updateCount();
+    setError(null);
+    return true;
+  } catch (error) {
+    console.error("get_today_items failed", error);
+    setError("Load failed");
+    return false;
+  }
+}
+
 async function handleBlur() {
   const rawText = editorEl.value;
   if (!rawText.trim()) {
@@ -124,12 +158,12 @@ async function handleBlur() {
   if (state.saving) {
     return;
   }
+  await refreshTodayIfStale();
   state.saving = true;
   const trimmedText = rawText.replace(/\s+$/, "");
 
   try {
     await invoke("append_today_item", {
-      filename: state.filename,
       text: trimmedText,
     });
     state.items.push(trimmedText);
@@ -145,7 +179,8 @@ async function handleBlur() {
   }
 }
 
-function handleFocus() {
+async function handleFocus() {
+  await refreshTodayIfStale();
   clearEditor();
   focusEditor();
 }
@@ -154,6 +189,7 @@ async function boot() {
   try {
     const data = await invoke("get_today_items");
     state.filename = data.filename;
+    state.date = dateFromFilename(data.filename);
     state.items = data.items;
     renderList();
     updateCount();
