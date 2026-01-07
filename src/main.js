@@ -79,8 +79,11 @@ function updateHeader() {
   if (!state.viewDate) {
     return;
   }
-  drawerTitleEl.textContent = formatViewDate(state.viewDate);
-  backToTodayEl.hidden = state.viewDate === state.todayDate;
+  const isToday = state.viewDate === state.todayDate;
+  drawerTitleEl.textContent = isToday
+    ? "Today"
+    : formatViewDate(state.viewDate);
+  backToTodayEl.hidden = isToday;
 }
 
 function displayText(item) {
