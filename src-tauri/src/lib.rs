@@ -20,6 +20,13 @@ struct TodayItems {
     counts: storage::Counts,
 }
 
+#[derive(Serialize)]
+struct DayItems {
+    date: String,
+    items: Vec<String>,
+    count: usize,
+}
+
 fn today_string() -> String {
     chrono::Local::now().format("%Y-%m-%d").to_string()
 }
@@ -122,6 +129,22 @@ fn get_today_items(app: tauri::AppHandle) -> TodayItems {
 }
 
 #[tauri::command]
+fn get_items_for_date(app: tauri::AppHandle, date: String) -> DayItems {
+    let root = storage::storage_root();
+    let items = storage::read_items_for_date(&root, &date);
+    let count = items.len();
+    set_window_title(&app, count);
+
+    DayItems { date, items, count }
+}
+
+#[tauri::command]
+fn list_day_counts(_app: tauri::AppHandle) -> Vec<storage::DayCount> {
+    let root = storage::storage_root();
+    storage::list_day_counts(&root)
+}
+
+#[tauri::command]
 fn append_today_item(app: tauri::AppHandle, text: String) -> storage::Counts {
     let root = storage::storage_root();
     let counts = storage::append_item_for_date(&root, &today_string(), &text);
@@ -165,7 +188,9 @@ pub fn run() {
             save_active_file,
             list_files,
             get_today_items,
-            append_today_item
+            append_today_item,
+            get_items_for_date,
+            list_day_counts
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
