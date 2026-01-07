@@ -1,5 +1,6 @@
 ### 2026-01-07 ✨
 
+- ✨ Add checkbox-based task completion with hover-only delete controls; checked items persist as `- [x]` in daily Markdown files, and deletions are safely moved into a rolling `trash.md` for recovery.
 - Add a bottom swim-lane day strip that surfaces recent days as tiny squares with count-based color intensity.
 - Clicking a day square switches the Today drawer to that day while keeping the capture editor writing to today.
 - Show “Today” label for the active day, show dates for past days, and include a Back to Today affordance.
