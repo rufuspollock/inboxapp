@@ -16,6 +16,7 @@
 html,
 body {
   height: 100%;
+  overflow: hidden;
 }
 
 body {
@@ -45,14 +46,26 @@ body {
   display: block;
   width: 100%;
   min-height: 52vh;
+  max-height: 52vh;
   border: none;
   background: transparent;
   color: inherit;
   font-size: 18px;
   line-height: 1.65;
   letter-spacing: 0.01em;
+  overflow-y: auto;
   resize: none;
   outline: none;
+}
+
+.capture__editor::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+.capture__editor {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
 
 .capture__editor::placeholder {
@@ -156,10 +169,18 @@ body {
 }
 
 .drawer[data-state="expanded"] .drawer__panel {
-  max-height: 320px;
+  max-height: 32vh;
   opacity: 1;
   transform: translateY(0);
   margin-top: 12px;
+  overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.drawer[data-state="expanded"] .drawer__panel::-webkit-scrollbar {
+  width: 0;
+  height: 0;
 }
 
 .drawer[data-state="expanded"] .drawer__chevron {
