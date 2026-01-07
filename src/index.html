@@ -27,6 +27,9 @@
             <span class="drawer__status" id="drawer-status" aria-live="polite"></span>
             <span class="drawer__chevron" aria-hidden="true">▴</span>
           </button>
+          <button class="drawer__back" type="button" id="back-to-today" hidden>
+            Back to Today
+          </button>
           <button class="drawer__copy" type="button" id="copy-all">
             Copy all
           </button>
@@ -34,6 +37,9 @@
         <div class="drawer__panel" id="today-panel">
           <ul class="drawer__list" id="today-list"></ul>
         </div>
+      </section>
+      <section class="day-strip" aria-label="Recent days">
+        <div class="day-strip__track" id="day-strip"></div>
       </section>
     </div>
   </body>
