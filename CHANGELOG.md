@@ -2,6 +2,7 @@
 
 - Fix stale daily file writes when the app stays open past midnight; appends now always target today's file.
 - Show newest Today items at the top of the list.
+- Lock window scrolling and hide scrollbars by scrolling within the editor and Today panel.
 - Tighten the Today list rows with compact spacing and subtle separators.
 
 ### 2026-01-02 — Simplify Interface
