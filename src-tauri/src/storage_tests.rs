@@ -1,6 +1,6 @@
 use crate::storage::{
     append_item_for_date, append_item_to_text, count_items, get_active_file_for_date,
-    journal_filename, load_or_create, save_active_file, split_items,
+    journal_filename, load_or_create, read_items_for_date, save_active_file, split_items,
 };
 use tempfile::tempdir;
 
@@ -49,6 +49,16 @@ fn get_active_file_creates_daily_file() {
     assert_eq!(result.counts.current, 0);
     assert_eq!(result.counts.total, 0);
     assert_eq!(result.counts.files, 1);
+}
+
+#[test]
+fn read_items_for_date_does_not_create_file() {
+    let root = tempdir().unwrap();
+    let items = read_items_for_date(root.path(), "2026-01-01");
+    let path = root.path().join("2026-01-01.md");
+
+    assert!(items.is_empty());
+    assert!(!path.exists());
 }
 
 #[test]

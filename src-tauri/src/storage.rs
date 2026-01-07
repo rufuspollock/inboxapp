@@ -97,6 +97,16 @@ pub fn count_items(text: &str) -> usize {
     split_items(text).len()
 }
 
+pub fn read_items_for_date(root: &Path, date: &str) -> Vec<String> {
+    let filename = journal_filename(date);
+    let path = root.join(filename);
+    let text = std::fs::read_to_string(path).unwrap_or_default();
+    if text.trim().is_empty() {
+        return Vec::new();
+    }
+    split_items(&text)
+}
+
 pub fn list_markdown_files(root: &Path) -> Vec<String> {
     let mut files = Vec::new();
     if let Ok(entries) = std::fs::read_dir(root) {
