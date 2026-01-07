@@ -34,7 +34,7 @@ body {
 
 .app {
   min-height: 100%;
-  padding: 56px 0 32px;
+  padding: 56px 24px 32px;
   display: flex;
   flex-direction: column;
   gap: 28px;
@@ -45,10 +45,6 @@ body {
 .drawer {
   width: 100%;
   max-width: 760px;
-}
-
-.capture {
-  padding: 0 24px;
 }
 
 .capture__editor {
@@ -84,6 +80,7 @@ body {
 .drawer {
   border-top: 1px solid var(--divider);
   padding-top: 12px;
+  padding-bottom: 0px;
 }
 
 .drawer__header {
