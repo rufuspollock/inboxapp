@@ -3,6 +3,7 @@ import {
   formatViewDate,
   visibleDateCount,
 } from "./day-strip.js";
+import { formatTaskItem, parseTaskItem } from "./task-items.js";
 
 const { invoke } = window.__TAURI__.core;
 
@@ -90,6 +91,21 @@ function displayText(item) {
   return item.replace(/\s+/g, " ").trim();
 }
 
+function updateItemAt(index, item) {
+  state.viewItems[index] = item;
+  if (state.viewDate === state.todayDate) {
+    state.todayItems[index] = item;
+  }
+}
+
+function setItemsForView(items) {
+  state.viewItems = items;
+  if (state.viewDate === state.todayDate) {
+    state.todayItems = items;
+  }
+  state.dayCounts.set(state.viewDate, items.length);
+}
+
 function todayString() {
   const now = new Date();
   const year = now.getFullYear();
@@ -105,13 +121,45 @@ function dateFromFilename(filename) {
 function renderList() {
   listEl.textContent = "";
   const items = state.viewItems.slice().reverse();
-  items.forEach((item) => {
+  items.forEach((item, position) => {
+    const index = state.viewItems.length - 1 - position;
+    const parsed = parseTaskItem(item);
     const row = document.createElement("li");
     row.className = "drawer__item";
+    if (parsed.checked) {
+      row.classList.add("drawer__item--checked");
+    }
+
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.className = "drawer__item-checkbox";
+    checkbox.checked = parsed.checked;
+    checkbox.setAttribute("aria-label", "Mark task as done");
+    checkbox.addEventListener("change", async (event) => {
+      event.stopPropagation();
+      checkbox.disabled = true;
+      const updatedItem = formatTaskItem(parsed.text, checkbox.checked);
+      try {
+        await invoke("update_item_for_date", {
+          date: state.viewDate,
+          index,
+          item: updatedItem,
+        });
+        updateItemAt(index, updatedItem);
+        renderList();
+        setError(null);
+      } catch (error) {
+        console.error("update_item_for_date failed", error);
+        checkbox.checked = parsed.checked;
+        setError("Save failed");
+      } finally {
+        checkbox.disabled = false;
+      }
+    });
 
     const text = document.createElement("span");
     text.className = "drawer__item-text";
-    text.textContent = displayText(item);
+    text.textContent = displayText(parsed.text);
 
     const copy = document.createElement("button");
     copy.type = "button";
@@ -122,7 +170,29 @@ function renderList() {
       copyText(item);
     });
 
-    row.append(text, copy);
+    const del = document.createElement("button");
+    del.type = "button";
+    del.className = "drawer__item-delete";
+    del.textContent = "Delete";
+    del.addEventListener("click", async (event) => {
+      event.stopPropagation();
+      try {
+        const updated = await invoke("delete_item_for_date", {
+          date: state.viewDate,
+          index,
+        });
+        setItemsForView(updated.items);
+        updateCount();
+        renderList();
+        renderDayStrip();
+        setError(null);
+      } catch (error) {
+        console.error("delete_item_for_date failed", error);
+        setError("Delete failed");
+      }
+    });
+
+    row.append(checkbox, text, copy, del);
     listEl.append(row);
   });
 }
