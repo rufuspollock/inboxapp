@@ -1,7 +1,7 @@
 use crate::storage::{
-    append_item_for_date, append_item_to_text, count_items, get_active_file_for_date,
-    journal_filename, list_day_counts, load_or_create, read_items_for_date, save_active_file,
-    split_items,
+    append_item_for_date, append_item_to_text, count_items, delete_item_for_date,
+    get_active_file_for_date, journal_filename, list_day_counts, load_or_create,
+    read_items_for_date, save_active_file, split_items, update_item_for_date,
 };
 use tempfile::tempdir;
 
@@ -74,6 +74,17 @@ fn list_day_counts_reads_existing_files() {
 }
 
 #[test]
+fn list_day_counts_ignores_trash_file() {
+    let root = tempdir().unwrap();
+    save_active_file(root.path(), "2026-01-01.md", "one\n");
+    std::fs::write(root.path().join("trash.md"), "discarded\n").unwrap();
+
+    let counts = list_day_counts(root.path());
+
+    assert!(!counts.iter().any(|c| c.date == "trash"));
+}
+
+#[test]
 fn save_active_file_updates_counts() {
     let root = tempdir().unwrap();
     let counts = save_active_file(root.path(), "2025-12-31.md", "one\n\n---\n\ntwo\n");
@@ -93,4 +104,26 @@ fn append_item_for_date_writes_to_daily_file() {
     assert_eq!(counts.total, 1);
     assert_eq!(counts.files, 1);
     assert!(std::fs::read_to_string(path).unwrap().contains("first"));
+}
+
+#[test]
+fn update_item_replaces_line() {
+    let root = tempdir().unwrap();
+    save_active_file(root.path(), "2026-01-07.md", "first\n\n---\n\nsecond\n");
+
+    let updated = update_item_for_date(root.path(), "2026-01-07", 0, "- [x] first");
+
+    assert_eq!(updated.items[0], "- [x] first");
+}
+
+#[test]
+fn delete_item_removes_and_appends_trash() {
+    let root = tempdir().unwrap();
+    save_active_file(root.path(), "2026-01-07.md", "first\n\n---\n\nsecond\n");
+
+    let updated = delete_item_for_date(root.path(), "2026-01-07", 0);
+
+    assert_eq!(updated.items, vec!["second"]);
+    let trash = std::fs::read_to_string(root.path().join("trash.md")).unwrap();
+    assert!(trash.contains("first"));
 }

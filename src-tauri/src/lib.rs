@@ -20,13 +20,6 @@ struct TodayItems {
     counts: storage::Counts,
 }
 
-#[derive(Serialize)]
-struct DayItems {
-    date: String,
-    items: Vec<String>,
-    count: usize,
-}
-
 fn today_string() -> String {
     chrono::Local::now().format("%Y-%m-%d").to_string()
 }
@@ -129,13 +122,13 @@ fn get_today_items(app: tauri::AppHandle) -> TodayItems {
 }
 
 #[tauri::command]
-fn get_items_for_date(app: tauri::AppHandle, date: String) -> DayItems {
+fn get_items_for_date(app: tauri::AppHandle, date: String) -> storage::DayItems {
     let root = storage::storage_root();
     let items = storage::read_items_for_date(&root, &date);
     let count = items.len();
     set_window_title(&app, count);
 
-    DayItems { date, items, count }
+    storage::DayItems { date, items, count }
 }
 
 #[tauri::command]
@@ -151,6 +144,33 @@ fn append_today_item(app: tauri::AppHandle, text: String) -> storage::Counts {
     set_tray_title(&app, counts.current);
     set_window_title(&app, counts.current);
     counts
+}
+
+#[tauri::command]
+fn update_item_for_date(
+    app: tauri::AppHandle,
+    date: String,
+    index: usize,
+    item: String,
+) -> storage::DayItems {
+    let root = storage::storage_root();
+    let updated = storage::update_item_for_date(&root, &date, index, &item);
+    if date == today_string() {
+        set_tray_title(&app, updated.count);
+    }
+    set_window_title(&app, updated.count);
+    updated
+}
+
+#[tauri::command]
+fn delete_item_for_date(app: tauri::AppHandle, date: String, index: usize) -> storage::DayItems {
+    let root = storage::storage_root();
+    let updated = storage::delete_item_for_date(&root, &date, index);
+    if date == today_string() {
+        set_tray_title(&app, updated.count);
+    }
+    set_window_title(&app, updated.count);
+    updated
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -190,7 +210,9 @@ pub fn run() {
             get_today_items,
             append_today_item,
             get_items_for_date,
-            list_day_counts
+            list_day_counts,
+            update_item_for_date,
+            delete_item_for_date
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

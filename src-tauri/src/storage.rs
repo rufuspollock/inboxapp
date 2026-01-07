@@ -1,7 +1,9 @@
+use chrono::Local;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
 const ITEM_DIVIDER: &str = "---";
+const TRASH_FILENAME: &str = "trash.md";
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Counts {
@@ -13,6 +15,13 @@ pub struct Counts {
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct DayCount {
     pub date: String,
+    pub count: usize,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct DayItems {
+    pub date: String,
+    pub items: Vec<String>,
     pub count: usize,
 }
 
@@ -113,6 +122,13 @@ pub fn read_items_for_date(root: &Path, date: &str) -> Vec<String> {
     split_items(&text)
 }
 
+fn items_to_text(items: &[String]) -> String {
+    if items.is_empty() {
+        return String::new();
+    }
+    format!("{}\n", items.join("\n\n---\n\n"))
+}
+
 pub fn list_markdown_files(root: &Path) -> Vec<String> {
     let mut files = Vec::new();
     if let Ok(entries) = std::fs::read_dir(root) {
@@ -122,6 +138,9 @@ pub fn list_markdown_files(root: &Path) -> Vec<String> {
                 continue;
             }
             if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                if name == TRASH_FILENAME {
+                    continue;
+                }
                 files.push(name.to_string());
             }
         }
@@ -185,4 +204,42 @@ pub fn append_item(root: &Path, filename: &str, item: &str) -> Counts {
 pub fn append_item_for_date(root: &Path, date: &str, item: &str) -> Counts {
     let filename = journal_filename(date);
     append_item(root, &filename, item)
+}
+
+pub fn update_item_for_date(root: &Path, date: &str, index: usize, item: &str) -> DayItems {
+    let filename = journal_filename(date);
+    let text = load_or_create(root, &filename);
+    let mut items = split_items(&text);
+    if index < items.len() {
+        items[index] = item.to_string();
+    }
+    let updated = items_to_text(&items);
+    save_active_file(root, &filename, &updated);
+    DayItems {
+        date: date.to_string(),
+        count: items.len(),
+        items,
+    }
+}
+
+pub fn delete_item_for_date(root: &Path, date: &str, index: usize) -> DayItems {
+    let filename = journal_filename(date);
+    let text = load_or_create(root, &filename);
+    let mut items = split_items(&text);
+    if index < items.len() {
+        let removed = items.remove(index);
+        let timestamp = Local::now().format("%Y-%m-%d %H:%M").to_string();
+        let trash_entry = format!("[{}]\n{}", timestamp, removed);
+        let trash_path = root.join(TRASH_FILENAME);
+        let trash_text = std::fs::read_to_string(&trash_path).unwrap_or_default();
+        let trash_updated = append_item_to_text(&trash_text, &trash_entry);
+        let _ = std::fs::write(trash_path, trash_updated);
+    }
+    let updated = items_to_text(&items);
+    save_active_file(root, &filename, &updated);
+    DayItems {
+        date: date.to_string(),
+        count: items.len(),
+        items,
+    }
 }
