@@ -189,18 +189,19 @@ body {
 .day-strip {
   width: 100%;
   max-width: 760px;
+  margin-top: auto;
 }
 
 .day-strip__track {
   display: flex;
-  gap: 6px;
+  gap: 0;
   align-items: center;
 }
 
 .day-strip__day {
   width: 18px;
   height: 18px;
-  border-radius: 4px;
+  border-radius: 0;
   border: 1px solid var(--divider);
   background: transparent;
   color: var(--muted-ink);
@@ -215,7 +216,7 @@ body {
 }
 
 .day-strip__day--level-0 {
-  background: transparent;
+  background: var(--day-0);
   color: var(--muted-ink);
 }
 

@@ -7,7 +7,7 @@ import {
 const { invoke } = window.__TAURI__.core;
 
 const DAY_TILE_SIZE = 18;
-const DAY_TILE_GAP = 6;
+const DAY_TILE_GAP = 0;
 
 const state = {
   todayFilename: "",
@@ -162,10 +162,23 @@ function renderDayStrip() {
     return;
   }
 
+  let oldestNonzeroDate = null;
+  for (const [date, count] of state.dayCounts.entries()) {
+    if (count > 0 && (!oldestNonzeroDate || date < oldestNonzeroDate)) {
+      oldestNonzeroDate = date;
+    }
+  }
+  if (!oldestNonzeroDate) {
+    oldestNonzeroDate = state.todayDate;
+  }
+
   const recentDates = buildRecentDates(state.todayDate, visibleCount);
   dayStripEl.textContent = "";
 
-  recentDates.forEach((date) => {
+  for (const date of recentDates) {
+    if (date < oldestNonzeroDate) {
+      break;
+    }
     const count = state.dayCounts.get(date) ?? 0;
     const level = dayCountLevel(count);
     const button = document.createElement("button");
@@ -175,7 +188,7 @@ function renderDayStrip() {
     if (date === state.viewDate) {
       button.classList.add("day-strip__day--active");
     }
-    button.textContent = formatDayCount(count);
+    button.textContent = count === 0 ? "" : formatDayCount(count);
     button.dataset.date = date;
     button.setAttribute(
       "aria-label",
@@ -186,7 +199,7 @@ function renderDayStrip() {
     });
 
     dayStripEl.append(button);
-  });
+  }
 }
 
 function syncTodayCount() {
