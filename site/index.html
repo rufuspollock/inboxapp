@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Inbox - Just capture. Nothing else.</title>
+    <meta
+      name="description"
+      content="Inbox is a hyper-minimal macOS inbox for capturing fleeting thoughts in Markdown with near-zero friction."
+    />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      :root {
+        --bg-start: #f8f4ee;
+        --bg-end: #efe7dc;
+        --ink: #14120f;
+        --muted-ink: #6b635b;
+        --divider: #e1d7ca;
+        --accent: #c9b59c;
+        --selection: #e7ddcf;
+        --day-2: #bdd9b3;
+        --day-3: #98c58f;
+        --blue-ink: #3d6f9a;
+        --red-ink: #e15a4f;
+      }
+
+      html {
+        scroll-behavior: smooth;
+      }
+
+      body {
+        font-family: "Iosevka", "IBM Plex Mono", "SFMono-Regular", "SF Mono",
+          "Menlo", "Monaco", "Courier New", monospace;
+        background: radial-gradient(
+            circle at top,
+            #faf7f1 0%,
+            var(--bg-start) 40%,
+            var(--bg-end) 100%
+          ),
+          repeating-linear-gradient(
+            135deg,
+            rgba(20, 18, 15, 0.04),
+            rgba(20, 18, 15, 0.04) 1px,
+            transparent 1px,
+            transparent 6px
+          );
+        color: var(--ink);
+      }
+
+      ::selection {
+        background: var(--selection);
+      }
+
+      .fade-up {
+        animation: fade-up 700ms ease both;
+      }
+
+      .fade-up.delay-1 {
+        animation-delay: 120ms;
+      }
+
+      .fade-up.delay-2 {
+        animation-delay: 220ms;
+      }
+
+      .fade-up.delay-3 {
+        animation-delay: 320ms;
+      }
+
+      @keyframes fade-up {
+        from {
+          opacity: 0;
+          transform: translateY(12px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+    </style>
+  </head>
+  <body class="min-h-screen">
+    <main
+      class="mx-auto flex w-full max-w-5xl flex-col gap-16 px-6 pb-20 pt-16 sm:px-10"
+    >
+      <section class="flex flex-col gap-10">
+        <div
+          class="flex flex-col gap-10 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <div class="flex max-w-2xl flex-col gap-5">
+            <div class="flex items-center gap-3 fade-up">
+              <svg
+                class="h-12 w-12"
+                viewBox="0 0 64 64"
+                aria-hidden="true"
+              >
+                <defs>
+                  <linearGradient id="tray" x1="0" x2="1">
+                    <stop offset="0" stop-color="#bcd4f0" />
+                    <stop offset="1" stop-color="#6aa7df" />
+                  </linearGradient>
+                </defs>
+                <rect x="10" y="24" width="44" height="28" rx="6" fill="url(#tray)" />
+                <path
+                  d="M16 28h32v10c0 4-3 7-7 7H23c-4 0-7-3-7-7V28z"
+                  fill="#ffffff"
+                  opacity="0.85"
+                />
+                <path d="M32 12l8 8h-5v8h-6v-8h-5l8-8z" fill="var(--red-ink)" />
+              </svg>
+              <span
+                class="text-sm uppercase tracking-[0.3em] text-[color:var(--muted-ink)]"
+                >Inbox</span
+              >
+            </div>
+            <h1 class="text-3xl font-semibold leading-tight sm:text-5xl fade-up delay-1">
+              Just capture. Nothing else.
+            </h1>
+            <p
+              class="text-base leading-relaxed text-[color:var(--muted-ink)] sm:text-lg fade-up delay-2"
+            >
+              InboxApp is a hyper-minimal macOS inbox for fleeting thoughts.
+              Capture fast, process later. One surface, zero
+              friction.
+            </p>
+            <div class="flex flex-wrap gap-3 fade-up delay-3">
+              <a
+                class="rounded-full border border-transparent bg-[color:var(--ink)] px-5 py-2 text-sm text-[color:var(--bg-start)] transition hover:translate-y-[-1px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+                href="https://github.com/rufuspollock/inboxapp/releases"
+              >
+                Download (macOS)
+              </a>
+              <a
+                class="rounded-full border border-[color:var(--divider)] px-5 py-2 text-sm text-[color:var(--ink)] transition hover:border-[color:var(--accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+                href="#demo"
+              >
+                Watch demo
+              </a>
+              <a
+                class="flex items-center gap-2 rounded-full border border-[color:var(--divider)] px-5 py-2 text-sm text-[color:var(--ink)] transition hover:border-[color:var(--accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+                href="https://github.com/rufuspollock/inboxapp"
+                target="_blank"
+                rel="noreferrer"
+              >
+                <svg
+                  class="h-4 w-4"
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                  focusable="false"
+                >
+                  <path
+                    fill="currentColor"
+                    d="M12 .5a11.5 11.5 0 0 0-3.64 22.43c.58.1.8-.25.8-.57v-2.08c-3.24.7-3.92-1.4-3.92-1.4-.53-1.35-1.3-1.7-1.3-1.7-1.06-.72.08-.7.08-.7 1.17.08 1.79 1.2 1.79 1.2 1.05 1.8 2.76 1.28 3.44.98.1-.76.4-1.28.72-1.58-2.58-.3-5.3-1.3-5.3-5.8 0-1.28.46-2.32 1.2-3.14-.12-.3-.52-1.52.12-3.18 0 0 .98-.32 3.22 1.2a11.2 11.2 0 0 1 5.86 0c2.24-1.52 3.22-1.2 3.22-1.2.64 1.66.24 2.88.12 3.18.74.82 1.2 1.86 1.2 3.14 0 4.52-2.72 5.5-5.32 5.78.42.36.8 1.08.8 2.18v3.24c0 .32.2.68.8.56A11.5 11.5 0 0 0 12 .5Z"
+                  />
+                </svg>
+                GitHub
+              </a>
+            </div>
+          </div>
+          <div
+            class="rounded-3xl border border-[color:var(--divider)] bg-white/40 p-6 shadow-[0_10px_40px_rgba(20,18,15,0.08)]"
+          >
+            <div
+              class="flex flex-col gap-4 text-xs text-[color:var(--muted-ink)]"
+            >
+              <div
+                class="flex items-center justify-between rounded-full border border-[color:var(--divider)] px-4 py-2"
+              >
+                <span>Inbox - 7</span>
+                <span>Today</span>
+              </div>
+              <div
+                class="h-40 rounded-2xl border border-dashed border-[color:var(--divider)] bg-white/70 p-4"
+              >
+                <p class="text-[color:var(--ink)]">- Capture thought</p>
+                <p>- Another idea</p>
+                <p>- Move later</p>
+              </div>
+              <div class="flex gap-2">
+                <span class="h-2 w-6 rounded-full bg-[color:var(--day-2)]"></span>
+                <span class="h-2 w-4 rounded-full bg-[color:var(--day-3)]"></span>
+              </div>
+              <p class="text-[color:var(--muted-ink)]">
+                Local files at <code class="text-[color:var(--ink)]">~/.inboxapp</code>
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section
+        class="grid gap-6 border-t border-[color:var(--divider)] pt-10 sm:grid-cols-2"
+      >
+        <h2 class="text-xl font-semibold">Why Inbox</h2>
+        <ul class="flex flex-col gap-4 text-sm text-[color:var(--muted-ink)]">
+          <li>Capture in under a second without derailing focus.</li>
+          <li>One surface, no tabs, no navigation, no decisions.</li>
+          <li>Raw Markdown saved locally in <code class="text-[color:var(--ink)]">~/.inboxapp</code>.</li>
+          <li>No AI, no tags, no organization -- just capture.</li>
+        </ul>
+      </section>
+
+      <section class="grid gap-6 sm:grid-cols-3">
+        <div class="rounded-2xl border border-[color:var(--divider)] p-5">
+          <h3 class="text-sm font-semibold">Open</h3>
+          <p class="mt-2 text-sm text-[color:var(--muted-ink)]">
+            Cursor lands at the end of today's file.
+          </p>
+        </div>
+        <div class="rounded-2xl border border-[color:var(--divider)] p-5">
+          <h3 class="text-sm font-semibold">Type</h3>
+          <p class="mt-2 text-sm text-[color:var(--muted-ink)]">
+            Append-only Markdown with near-zero UI friction.
+          </p>
+        </div>
+        <div class="rounded-2xl border border-[color:var(--divider)] p-5">
+          <h3 class="text-sm font-semibold">Process</h3>
+          <p class="mt-2 text-sm text-[color:var(--muted-ink)]">
+            Move items elsewhere until the count hits zero.
+          </p>
+        </div>
+      </section>
+
+      <section id="demo" class="flex flex-col gap-6">
+        <div class="flex flex-col gap-2">
+          <h2 class="text-xl font-semibold">Demo</h2>
+          <p class="text-sm text-[color:var(--muted-ink)]">
+            See the one-surface workflow in under two minutes.
+          </p>
+        </div>
+        <div
+          class="aspect-video w-full overflow-hidden rounded-2xl border border-[color:var(--divider)] bg-white/60"
+        >
+          <iframe
+            class="h-full w-full"
+            src="https://www.youtube-nocookie.com/embed/JdY6tsNhN30?rel=0&modestbranding=1"
+            title="InboxApp demo"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowfullscreen
+            referrerpolicy="strict-origin-when-cross-origin"
+          ></iframe>
+        </div>
+      </section>
+
+      <section
+        class="flex flex-col gap-4 rounded-3xl border border-[color:var(--divider)] bg-white/60 p-8"
+      >
+        <h2 class="text-xl font-semibold">Download the alpha</h2>
+        <p class="text-sm text-[color:var(--muted-ink)]">
+          Developer-only for now. Packaged installer coming later. Feedback welcome.
+        </p>
+        <div class="flex flex-wrap gap-3">
+          <a
+            class="rounded-full border border-transparent bg-[color:var(--ink)] px-5 py-2 text-sm text-[color:var(--bg-start)] transition hover:translate-y-[-1px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+            href="https://github.com/rufuspollock/inboxapp/releases"
+          >
+            Get the latest build
+          </a>
+          <a
+            class="rounded-full border border-[color:var(--divider)] px-5 py-2 text-sm text-[color:var(--ink)] transition hover:border-[color:var(--accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+            href="https://github.com/rufuspollock/inboxapp/issues"
+          >
+            Share feedback
+          </a>
+        </div>
+      </section>
+
+      <footer class="border-t border-[color:var(--divider)] pt-6 text-xs text-[color:var(--muted-ink)]">
+        <p>macOS-only. Local files. Designed to be emptied.</p>
+      </footer>
+    </main>
+  </body>
+</html>
