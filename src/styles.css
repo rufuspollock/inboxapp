@@ -34,7 +34,7 @@ body {
 
 .app {
   min-height: 100%;
-  padding: 56px 24px 64px;
+  padding: 56px 24px 32px;
   display: flex;
   flex-direction: column;
   gap: 28px;
@@ -188,14 +188,19 @@ body {
 
 .day-strip {
   width: 100%;
-  max-width: 760px;
-  margin-top: auto;
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 0 24px;
 }
 
 .day-strip__track {
   display: flex;
   gap: 0;
   align-items: center;
+  max-width: 760px;
+  margin: 0 auto;
 }
 
 .day-strip__day {
