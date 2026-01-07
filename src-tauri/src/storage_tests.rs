@@ -1,6 +1,7 @@
 use crate::storage::{
     append_item_for_date, append_item_to_text, count_items, get_active_file_for_date,
-    journal_filename, load_or_create, read_items_for_date, save_active_file, split_items,
+    journal_filename, list_day_counts, load_or_create, read_items_for_date, save_active_file,
+    split_items,
 };
 use tempfile::tempdir;
 
@@ -59,6 +60,17 @@ fn read_items_for_date_does_not_create_file() {
 
     assert!(items.is_empty());
     assert!(!path.exists());
+}
+
+#[test]
+fn list_day_counts_reads_existing_files() {
+    let root = tempdir().unwrap();
+    save_active_file(root.path(), "2026-01-01.md", "one\n\n---\n\ntwo\n");
+    save_active_file(root.path(), "2026-01-02.md", "one\n");
+
+    let counts = list_day_counts(root.path());
+    assert!(counts.iter().any(|c| c.date == "2026-01-01" && c.count == 2));
+    assert!(counts.iter().any(|c| c.date == "2026-01-02" && c.count == 1));
 }
 
 #[test]

@@ -10,6 +10,12 @@ pub struct Counts {
     pub files: usize,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct DayCount {
+    pub date: String,
+    pub count: usize,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ActiveFile {
     pub filename: String,
@@ -122,6 +128,20 @@ pub fn list_markdown_files(root: &Path) -> Vec<String> {
     }
     files.sort();
     files
+}
+
+pub fn list_day_counts(root: &Path) -> Vec<DayCount> {
+    let mut out = Vec::new();
+    for name in list_markdown_files(root) {
+        let date = name.trim_end_matches(".md").to_string();
+        let path = root.join(&name);
+        let text = std::fs::read_to_string(path).unwrap_or_default();
+        out.push(DayCount {
+            date,
+            count: count_items(&text),
+        });
+    }
+    out
 }
 
 pub fn load_or_create(root: &Path, filename: &str) -> String {
