@@ -2,7 +2,7 @@
 
 ### Just capture. Nothing else.
 
-#### Capture without thinking. Process later.
+#### Capture fast. Process later.
 
 InboxApp is a hyper-minimal macOS inbox for capturing fleeting thoughts in Markdown with near-zero friction. It is designed to be emptied, not to become another knowledge base.
 
