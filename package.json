@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "test": "echo \"No tests\"",
+    "test": "node --test",
     "tauri": "tauri",
     "dev": "tauri dev",
     "build": "tauri build"
