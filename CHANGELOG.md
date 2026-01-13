@@ -1,3 +1,9 @@
+### 2026-01-13 ✨
+
+- Copying items now outputs Markdown checkboxes (checked state preserved).
+- Copy all adds a `### YYYY-MM-DD` heading and formats items as a checklist.
+- Multi-paragraph items copy with proper list indentation and blank-line spacing.
+
 ### 2026-01-07 ✨
 
 - ✨ Add checkbox-based task completion with hover-only delete controls; checked items persist as `- [x]` in daily Markdown files, and deletions are safely moved into a rolling `trash.md` for recovery.
