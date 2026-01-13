@@ -6,6 +6,8 @@
 
 InboxApp is a hyper-minimal macOS inbox for capturing fleeting thoughts in Markdown with near-zero friction. It is designed to be emptied, not to become another knowledge base.
 
+🔗 https://tryinbox.app/
+
 📺 Watch the demo https://www.youtube.com/watch?v=JdY6tsNhN30
 
 ## Key Features
@@ -19,9 +21,36 @@ InboxApp is a hyper-minimal macOS inbox for capturing fleeting thoughts in Markd
 
 ## Install (Developer)
 
-For now, install is developer-only. A packaged installer will come later.
+Use the DMG on the GitHub releases page. 
+
+🚩 This app is not yet signed or notarized by Apple, so macOS may block it on first launch.
+
+**Option A (recommended)**
+
+1. In Finder, Control-click the app (or the app inside the DMG).
+2. Choose **Open**.
+3. When prompted, click **Open** again.
+
+**Option B**
+
+1. Try to open the app once (it will be blocked).
+2. Go to **System Settings → Privacy & Security**.
+3. Click **Open Anyway** next to the app.
+
+**Advanced (Terminal)**
+
+```bash
+xattr -dr com.apple.quarantine /path/to/YourApp.app
+```
+
+**Notes**
+
+* These steps create a per-app exception in Gatekeeper.
+* Only proceed if you trust the source.
+* Updates may require repeating the process.
 
 ### Prerequisites
+
 - Node.js (with npm)
 - Rust toolchain
 - Tauri prerequisites for macOS (Xcode Command Line Tools)

@@ -9,3 +9,11 @@ NB: decided this was overelaborate and went for something much simpler.
 - Copy behavior: clicking Copy should also set “moved” status; moved can also be set directly via the 🚚 action icon.
 - File storage: status is written into the markdown line itself (emoji inserted after any leading checkbox, e.g., [ ] 🚚 …), not app‑only state.
 - UI placement: status emoji shown on the left, adjacent to the checklist indicator; in the complex proposal we debated whether the emoji replaces the checkbox or sits next to it.
+
+### Original
+
+want to have 3 different ways To complete a task
+
+- processed
+- ignore / trash
+- someday
