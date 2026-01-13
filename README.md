@@ -65,6 +65,12 @@ npm run dev
 - `npm run dev` - Run the app in development mode.
 - `npm run build` - Build a macOS installer in `src-tauri/target/release/bundle/`.
 
+### Release Flow
+- Use Conventional Commits on branches merged into `main`.
+- Release Please opens or updates a release PR on `main`.
+- Merge the release PR to create the `vX.Y.Z` tag and GitHub Release.
+- GitHub Actions builds the DMG and attaches it to the release.
+
 ## Develop
 
 ### Run the app
