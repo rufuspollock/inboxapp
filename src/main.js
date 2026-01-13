@@ -3,7 +3,12 @@ import {
   formatViewDate,
   visibleDateCount,
 } from "./day-strip.js";
-import { formatTaskItem, parseTaskItem } from "./task-items.js";
+import {
+  formatTaskItem,
+  parseTaskItem,
+  formatMarkdownChecklistItem,
+  formatMarkdownChecklist,
+} from "./task-items.js";
 
 const { invoke } = window.__TAURI__.core;
 
@@ -114,6 +119,10 @@ function todayString() {
   return `${year}-${month}-${day}`;
 }
 
+function todayHeading() {
+  return `### ${todayString()}`;
+}
+
 function dateFromFilename(filename) {
   return filename.replace(/\.md$/, "");
 }
@@ -167,7 +176,8 @@ function renderList() {
     copy.textContent = "Copy";
     copy.addEventListener("click", (event) => {
       event.stopPropagation();
-      copyText(item);
+      const parsed = parseTaskItem(item);
+      copyText(formatMarkdownChecklistItem(parsed.text, parsed.checked));
     });
 
     const del = document.createElement("button");
@@ -459,7 +469,9 @@ copyAllEl.addEventListener("click", () => {
   if (!state.viewItems.length) {
     return;
   }
-  const joined = state.viewItems.join("\n\n---\n\n");
+  const joined = formatMarkdownChecklist(state.viewItems, {
+    heading: todayHeading(),
+  });
   copyText(joined);
 });
 

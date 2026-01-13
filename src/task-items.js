@@ -19,3 +19,34 @@ export function formatTaskItem(text, checked) {
   lines[0] = marker + (lines[0] ?? "");
   return lines.join("\n");
 }
+
+export function formatMarkdownChecklistItem(text, checked) {
+  const lines = text.split("\n");
+  const marker = checked ? "- [x] " : "- [ ] ";
+  const out = lines.map((line, index) => {
+    if (index === 0) {
+      return marker + (line ?? "");
+    }
+    if (line.trim() === "") {
+      return "";
+    }
+    return `  ${line}`;
+  });
+  return out.join("\n");
+}
+
+export function formatMarkdownChecklist(items, options = {}) {
+  const { heading } = options;
+  const parts = [];
+  if (heading) {
+    parts.push(heading, "");
+  }
+  items.forEach((item, index) => {
+    if (index > 0) {
+      parts.push("");
+    }
+    const parsed = parseTaskItem(item);
+    parts.push(formatMarkdownChecklistItem(parsed.text, parsed.checked));
+  });
+  return parts.join("\n");
+}
