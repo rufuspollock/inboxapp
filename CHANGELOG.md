@@ -1,3 +1,9 @@
+## 0.2.3 (2026-10-22)
+
+- Save captures explicitly with Save or ⌘Enter; drafts survive app switching and restarts.
+- Edit entries from any day with Save/Cancel and a date picker for older journals.
+- Keep drafts and edits intact when a disk write fails.
+
 ### 2026-01-13 ✨
 
 - Copying items now outputs Markdown checkboxes (checked state preserved).
