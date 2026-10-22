@@ -20,3 +20,8 @@ test("release-please config includes extra files for tauri versioning", async ()
   assert.ok(extraFiles.includes("src-tauri/tauri.conf.json"));
   assert.ok(extraFiles.includes("src-tauri/Cargo.toml"));
 });
+
+test("manifest releases include the application at the repository root", async () => {
+  const config = JSON.parse(await fs.readFile(configPath, "utf-8"));
+  assert.ok(Object.hasOwn(config.packages ?? {}, "."), "Root package must be configured or Release Please silently releases nothing");
+});
