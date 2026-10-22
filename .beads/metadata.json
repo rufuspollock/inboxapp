@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "inboxapp",
+  "project_id": "bc4eea46-1c4a-46c1-b343-ab5291007710"
+}
