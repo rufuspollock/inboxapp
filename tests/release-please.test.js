@@ -16,7 +16,7 @@ test("release-please config includes extra files for tauri versioning", async ()
   const config = JSON.parse(raw);
   assert.equal(config["release-type"], "node");
   assert.equal(config["package-name"], "tauri-app");
-  const extraFiles = config["extra-files"].map((file) => normalizePath(file));
+  const extraFiles = config["extra-files"].map((file) => normalizePath(typeof file === "string" ? file : file.path));
   assert.ok(extraFiles.includes("src-tauri/tauri.conf.json"));
   assert.ok(extraFiles.includes("src-tauri/Cargo.toml"));
 });
@@ -24,4 +24,10 @@ test("release-please config includes extra files for tauri versioning", async ()
 test("manifest releases include the application at the repository root", async () => {
   const config = JSON.parse(await fs.readFile(configPath, "utf-8"));
   assert.ok(Object.hasOwn(config.packages ?? {}, "."), "Root package must be configured or Release Please silently releases nothing");
+});
+
+test("Rust package version updater targets the package table", async () => {
+  const config = JSON.parse(await fs.readFile(configPath, "utf-8"));
+  const cargo = config["extra-files"].find(file => typeof file === "object" && file.path === "src-tauri/Cargo.toml");
+  assert.equal(cargo?.jsonpath, "$.package.version");
 });
