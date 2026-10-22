@@ -138,12 +138,12 @@ fn list_day_counts(_app: tauri::AppHandle) -> Vec<storage::DayCount> {
 }
 
 #[tauri::command]
-fn append_today_item(app: tauri::AppHandle, text: String) -> storage::Counts {
+fn append_today_item(app: tauri::AppHandle, text: String) -> Result<storage::Counts, String> {
     let root = storage::storage_root();
-    let counts = storage::append_item_for_date(&root, &today_string(), &text);
+    let counts = storage::try_append_item_for_date(&root, &today_string(), &text).map_err(|error| error.to_string())?;
     set_tray_title(&app, counts.current);
     set_window_title(&app, counts.current);
-    counts
+    Ok(counts)
 }
 
 #[tauri::command]
@@ -152,14 +152,15 @@ fn update_item_for_date(
     date: String,
     index: usize,
     item: String,
-) -> storage::DayItems {
+    expected_item: Option<String>,
+) -> Result<storage::DayItems, String> {
     let root = storage::storage_root();
-    let updated = storage::update_item_for_date(&root, &date, index, &item);
+    let updated = storage::try_update_item_for_date(&root, &date, index, &item, expected_item.as_deref()).map_err(|error| error.to_string())?;
     if date == today_string() {
         set_tray_title(&app, updated.count);
     }
     set_window_title(&app, updated.count);
-    updated
+    Ok(updated)
 }
 
 #[tauri::command]

@@ -243,3 +243,39 @@ pub fn delete_item_for_date(root: &Path, date: &str, index: usize) -> DayItems {
         items,
     }
 }
+
+
+fn write_atomically(root: &Path, filename: &str, text: &str) -> std::io::Result<()> {
+    use std::io::Write;
+    std::fs::create_dir_all(root)?;
+    let mut pending = tempfile::NamedTempFile::new_in(root)?;
+    pending.write_all(text.as_bytes())?;
+    pending.as_file().sync_all()?;
+    pending.persist(root.join(filename)).map_err(|error| error.error)?;
+    Ok(())
+}
+
+pub fn try_append_item_for_date(root: &Path, date: &str, item: &str) -> std::io::Result<Counts> {
+    let filename = journal_filename(date);
+    let existing = match std::fs::read_to_string(root.join(&filename)) {
+        Ok(text) => text,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(error) => return Err(error),
+    };
+    let text = append_item_to_text(&existing, item);
+    write_atomically(root, &filename, &text)?;
+    Ok(counts_for_root(root, &filename, &text))
+}
+
+pub fn try_update_item_for_date(root: &Path, date: &str, index: usize, item: &str, expected_item: Option<&str>) -> std::io::Result<DayItems> {
+    let filename = journal_filename(date);
+    let text = std::fs::read_to_string(root.join(&filename))?;
+    let mut items = split_items(&text);
+    let original = items.get(index).ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidInput, "Entry no longer exists"))?;
+    if expected_item.is_some_and(|expected| expected != original) {
+        return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "Entry changed elsewhere; reopen it before saving"));
+    }
+    items[index] = item.to_string();
+    write_atomically(root, &filename, &items_to_text(&items))?;
+    Ok(DayItems { date: date.to_string(), count: items.len(), items })
+}

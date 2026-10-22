@@ -17,6 +17,11 @@
           placeholder="Type..."
           spellcheck="true"
         ></textarea>
+        <div class="capture__actions">
+          <span id="capture-status" class="capture__status" role="status" aria-live="polite"></span>
+          <button id="save-capture" type="button" disabled title="Save (⌘Enter)">Save</button>
+          <span class="capture__shortcut" aria-hidden="true">⌘↵</span>
+        </div>
       </section>
 
       <section class="drawer" data-state="collapsed">
@@ -27,6 +32,7 @@
             <span class="drawer__status" id="drawer-status" aria-live="polite"></span>
             <span class="drawer__chevron" aria-hidden="true">▴</span>
           </button>
+          <input id="history-date" class="drawer__date" type="date" aria-label="Choose a day" title="Open any day" />
           <button class="drawer__back" type="button" id="back-to-today" hidden>
             Back to Today
           </button>

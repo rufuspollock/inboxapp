@@ -127,3 +127,22 @@ fn delete_item_removes_and_appends_trash() {
     let trash = std::fs::read_to_string(root.path().join("trash.md")).unwrap();
     assert!(trash.contains("first"));
 }
+
+#[test]
+fn explicit_save_reports_write_failure() {
+    let root = tempdir().unwrap();
+    let file = root.path().join("not-a-directory");
+    std::fs::write(&file, "keep").unwrap();
+    assert!(crate::storage::try_append_item_for_date(&file, "2026-10-22", "draft").is_err());
+}
+
+#[test]
+fn editing_checks_original_and_preserves_other_entries() {
+    let root = tempdir().unwrap();
+    save_active_file(root.path(), "2026-01-07.md", "first\n\n---\n\nsecond\n");
+    let conflict = crate::storage::try_update_item_for_date(root.path(), "2026-01-07", 0, "edit", Some("stale"));
+    assert!(conflict.is_err());
+    assert_eq!(read_items_for_date(root.path(), "2026-01-07"), vec!["first", "second"]);
+    let saved = crate::storage::try_update_item_for_date(root.path(), "2026-01-07", 0, "- [x] edited\n\nparagraph", Some("first")).unwrap();
+    assert_eq!(saved.items, vec!["- [x] edited\n\nparagraph", "second"]);
+}

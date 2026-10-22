@@ -13,7 +13,9 @@ InboxApp is a hyper-minimal macOS inbox for capturing fleeting thoughts in Markd
 ## Key Features
 
 - Single, distraction-free writing surface with raw Markdown.
-- Today-only capture buffer (daily file) with the cursor placed at the end on open.
+- Explicit Save button or `⌘+Enter` to capture a thought into today’s Markdown file.
+- Drafts stay put when switching apps and recover after restarting.
+- Click any saved entry to edit it with Save/Cancel; use the date picker to open older days.
 - Local, offline storage in human-readable files at `~/.inboxapp`.
 - Ultra-lightweight UI that resembles a blank page (black/white, minimalist).
 - Today’s item count shown in the native window title as `Inbox — N`.

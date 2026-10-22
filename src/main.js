@@ -25,10 +25,15 @@ const state = {
   drawerOpen: false,
   error: null,
   saving: false,
+  editing: null,
+  itemSaving: false,
   statusTimer: null,
 };
 
 const editorEl = document.querySelector("#editor");
+const saveCaptureEl = document.querySelector("#save-capture");
+const captureStatusEl = document.querySelector("#capture-status");
+const DRAFT_KEY = "inboxapp.capture-draft";
 const drawerEl = document.querySelector(".drawer");
 const toggleEl = document.querySelector("#drawer-toggle");
 const listEl = document.querySelector("#today-list");
@@ -37,6 +42,8 @@ const copyAllEl = document.querySelector("#copy-all");
 const statusEl = document.querySelector("#drawer-status");
 const drawerTitleEl = document.querySelector(".drawer__title");
 const backToTodayEl = document.querySelector("#back-to-today");
+const historyDateEl = document.querySelector("#history-date");
+let viewRequest = 0;
 const dayStripEl = document.querySelector("#day-strip");
 
 function setDrawerState(open) {
@@ -44,8 +51,25 @@ function setDrawerState(open) {
   drawerEl.dataset.state = open ? "expanded" : "collapsed";
 }
 
+function updateCaptureControls() {
+  saveCaptureEl.disabled = state.saving || state.itemSaving || !editorEl.value.trim();
+  editorEl.readOnly = state.saving;
+  saveCaptureEl.textContent = state.saving ? "Saving…" : "Save";
+}
+
+function persistDraft() {
+  try {
+    if (editorEl.value) window.localStorage.setItem(DRAFT_KEY, editorEl.value);
+    else window.localStorage.removeItem(DRAFT_KEY);
+  } catch (error) {
+    captureStatusEl.textContent = "Draft recovery unavailable. Save before quitting.";
+  }
+  updateCaptureControls();
+}
+
 function clearEditor() {
   editorEl.value = "";
+  persistDraft();
 }
 
 function focusEditor() {
@@ -85,6 +109,8 @@ function updateHeader() {
   if (!state.viewDate) {
     return;
   }
+  historyDateEl.value = state.viewDate;
+  historyDateEl.max = state.todayDate;
   const isToday = state.viewDate === state.todayDate;
   drawerTitleEl.textContent = isToday
     ? "Today"
@@ -139,20 +165,33 @@ function renderList() {
       row.classList.add("drawer__item--checked");
     }
 
+    if (state.editing?.date === state.viewDate && state.editing.index === index) {
+      renderEditRow(row);
+      listEl.append(row);
+      return;
+    }
+
     const checkbox = document.createElement("input");
     checkbox.type = "checkbox";
     checkbox.className = "drawer__item-checkbox";
     checkbox.checked = parsed.checked;
+    checkbox.disabled = !!state.editing || state.itemSaving;
     checkbox.setAttribute("aria-label", "Mark task as done");
     checkbox.addEventListener("change", async (event) => {
       event.stopPropagation();
+      if (state.saving || state.itemSaving || state.editing) return;
+      state.itemSaving = true;
+      ++viewRequest;
+      updateCaptureControls();
       checkbox.disabled = true;
+      renderList();
       const updatedItem = formatTaskItem(parsed.text, checkbox.checked);
       try {
         await invoke("update_item_for_date", {
           date: state.viewDate,
           index,
           item: updatedItem,
+          expectedItem: item,
         });
         updateItemAt(index, updatedItem);
         renderList();
@@ -162,13 +201,30 @@ function renderList() {
         checkbox.checked = parsed.checked;
         setError("Save failed");
       } finally {
-        checkbox.disabled = false;
+        state.itemSaving = false;
+        updateCaptureControls();
+        renderList();
       }
     });
 
-    const text = document.createElement("span");
+    const text = document.createElement("button");
+    text.type = "button";
     text.className = "drawer__item-text";
     text.textContent = displayText(parsed.text);
+    text.title = "Edit entry";
+    text.disabled = state.saving || state.itemSaving;
+    text.setAttribute("aria-label", `Edit entry: ${displayText(parsed.text)}`);
+    text.addEventListener("click", () => {
+      if (state.saving || state.itemSaving) return;
+      if (state.editing) {
+        setError("Save or cancel the current edit first");
+        return;
+      }
+      ++viewRequest;
+      state.editing = { date: state.viewDate, index, original: item, text: parsed.text, checked: parsed.checked };
+      renderList();
+      listEl.querySelector(".drawer__item-editor")?.focus();
+    });
 
     const copy = document.createElement("button");
     copy.type = "button";
@@ -184,8 +240,14 @@ function renderList() {
     del.type = "button";
     del.className = "drawer__item-delete";
     del.textContent = "Delete";
+    del.disabled = !!state.editing || state.itemSaving;
     del.addEventListener("click", async (event) => {
       event.stopPropagation();
+      if (state.saving || state.itemSaving || state.editing) return;
+      state.itemSaving = true;
+      ++viewRequest;
+      updateCaptureControls();
+      renderList();
       try {
         const updated = await invoke("delete_item_for_date", {
           date: state.viewDate,
@@ -199,12 +261,97 @@ function renderList() {
       } catch (error) {
         console.error("delete_item_for_date failed", error);
         setError("Delete failed");
+      } finally {
+        state.itemSaving = false;
+        updateCaptureControls();
+        renderList();
       }
     });
 
     row.append(checkbox, text, copy, del);
     listEl.append(row);
   });
+}
+
+function renderEditRow(row) {
+  row.classList.add("drawer__item--editing");
+  row.classList.remove("drawer__item--checked");
+  const edit = state.editing;
+  const field = document.createElement("textarea");
+  field.className = "drawer__item-editor";
+  field.value = edit.text;
+  field.rows = Math.min(8, Math.max(3, edit.text.split("\n").length));
+  field.setAttribute("aria-label", "Edit entry");
+  field.readOnly = state.itemSaving;
+  const actions = document.createElement("div");
+  actions.className = "drawer__item-actions";
+  const save = document.createElement("button");
+  save.className = "drawer__item-save";
+  save.type = "button";
+  save.textContent = state.itemSaving ? "Saving…" : "Save";
+  save.disabled = state.itemSaving || !edit.text.trim();
+  const cancel = document.createElement("button");
+  cancel.className = "drawer__item-cancel";
+  cancel.type = "button";
+  cancel.textContent = "Cancel";
+  cancel.disabled = state.itemSaving;
+  field.addEventListener("input", () => {
+    edit.text = field.value;
+    save.disabled = !edit.text.trim() || state.itemSaving;
+  });
+  cancel.addEventListener("click", async () => {
+    state.editing = null;
+    setError(null);
+    renderList();
+    const date = state.viewDate;
+    const request = ++viewRequest;
+    try {
+      const data = await invoke("get_items_for_date", { date });
+      if (request !== viewRequest || state.viewDate !== date || state.editing || state.itemSaving || state.saving) return;
+      setItemsForView(data.items);
+      renderList();
+      updateCount();
+      renderDayStrip();
+    } catch (error) {
+      setError("Refresh failed");
+    }
+  });
+  save.addEventListener("click", saveEditedItem);
+  field.addEventListener("keydown", (event) => {
+    if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+      event.preventDefault();
+      saveEditedItem();
+    } else if (event.key === "Escape" && !state.itemSaving) cancel.click();
+  });
+  actions.append(save, cancel);
+  row.append(field, actions);
+}
+
+async function saveEditedItem() {
+  const edit = state.editing;
+  if (!edit || state.saving || state.itemSaving || !edit.text.trim()) return;
+  state.itemSaving = true;
+      ++viewRequest;
+  updateCaptureControls();
+  renderList();
+  try {
+    const item = formatTaskItem(edit.text.replace(/\s+$/, ""), edit.checked);
+    const updated = await invoke("update_item_for_date", { date: edit.date, index: edit.index, item, expectedItem: edit.original });
+    if (state.viewDate === edit.date) setItemsForView(updated.items);
+    if (state.todayDate === edit.date) state.todayItems = updated.items;
+    state.editing = null;
+    setError(null);
+    showStatus("Saved");
+  } catch (error) {
+    console.error("update_item_for_date failed", error);
+    setError(String(error).includes("changed elsewhere") || String(error).includes("no longer exists")
+      ? "Entry changed elsewhere. Cancel, reopen the day, then edit again."
+      : "Save failed — your edit is still here");
+  } finally {
+    state.itemSaving = false;
+    updateCaptureControls();
+    renderList();
+  }
 }
 
 function formatDayCount(count) {
@@ -305,7 +452,7 @@ async function copyText(text) {
 async function pasteFromClipboard() {
   try {
     const text = await invoke("plugin:clipboard-manager|read_text");
-    if (!text) {
+    if (!text || state.saving) {
       return;
     }
     const start = editorEl.selectionStart;
@@ -314,6 +461,7 @@ async function pasteFromClipboard() {
     editorEl.value = value.slice(0, start) + text + value.slice(end);
     const cursor = start + text.length;
     editorEl.setSelectionRange(cursor, cursor);
+    persistDraft();
   } catch (error) {
     console.error("clipboard read failed", error);
     setError("Paste failed");
@@ -329,7 +477,7 @@ async function loadTodayItems() {
   state.todayItems = data.items;
   syncTodayCount();
 
-  if (!state.viewDate || state.viewDate === previousToday) {
+  if (!state.viewDate || (state.viewDate === previousToday && !state.editing)) {
     state.viewDate = state.todayDate;
     state.viewItems = state.todayItems;
   }
@@ -371,7 +519,14 @@ async function refreshTodayIfStale() {
 }
 
 async function setViewDate(date) {
-  if (state.viewDate === date) {
+  const request = ++viewRequest;
+  if (state.editing && date !== state.viewDate) {
+    historyDateEl.value = state.viewDate;
+    setError("Save or cancel your edit before switching days");
+    return;
+  }
+  if (state.saving || state.itemSaving || state.viewDate === date) {
+    historyDateEl.value = state.viewDate;
     return;
   }
 
@@ -387,6 +542,7 @@ async function setViewDate(date) {
 
   try {
     const data = await invoke("get_items_for_date", { date });
+    if (request !== viewRequest || state.editing || state.itemSaving || state.saving) return;
     state.viewDate = data.date;
     state.viewItems = data.items;
     renderList();
@@ -400,17 +556,21 @@ async function setViewDate(date) {
   }
 }
 
-async function handleBlur() {
+async function saveCapture() {
   const rawText = editorEl.value;
   if (!rawText.trim()) {
     clearEditor();
     return;
   }
-  if (state.saving) {
+  if (state.saving || state.itemSaving) {
     return;
   }
-  await refreshTodayIfStale();
   state.saving = true;
+  ++viewRequest;
+  updateCaptureControls();
+  renderList();
+  captureStatusEl.textContent = "";
+  await refreshTodayIfStale();
   const trimmedText = rawText.replace(/\s+$/, "");
 
   try {
@@ -430,22 +590,30 @@ async function handleBlur() {
 
     renderDayStrip();
     clearEditor();
+    setDrawerState(true);
+    captureStatusEl.textContent = "Saved to Today";
     setError(null);
   } catch (error) {
     console.error("append_today_item failed", error);
-    setError("Save failed");
+    captureStatusEl.textContent = "Save failed — your draft is still here";
   } finally {
     state.saving = false;
+    updateCaptureControls();
+    renderList();
   }
 }
 
 async function handleFocus() {
   await refreshTodayIfStale();
-  clearEditor();
-  focusEditor();
 }
 
 async function boot() {
+  try {
+    editorEl.value = window.localStorage.getItem(DRAFT_KEY) || "";
+  } catch (error) {
+    captureStatusEl.textContent = "Draft recovery unavailable. Save before quitting.";
+  }
+  updateCaptureControls();
   try {
     await loadTodayItems();
     await loadDayCounts();
@@ -475,14 +643,26 @@ copyAllEl.addEventListener("click", () => {
   copyText(joined);
 });
 
-window.addEventListener("blur", handleBlur);
+historyDateEl.addEventListener("change", () => {
+  if (historyDateEl.value) setViewDate(historyDateEl.value);
+});
+saveCaptureEl.addEventListener("click", saveCapture);
+editorEl.addEventListener("input", () => {
+  captureStatusEl.textContent = "";
+  persistDraft();
+});
 window.addEventListener("focus", handleFocus);
 window.addEventListener("resize", renderDayStrip);
 window.addEventListener("DOMContentLoaded", boot);
 editorEl.addEventListener("keydown", (event) => {
+  if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+    event.preventDefault();
+    saveCapture();
+    return;
+  }
   if (event.metaKey && event.key.toLowerCase() === "v") {
     event.preventDefault();
     event.stopPropagation();
-    pasteFromClipboard();
+    if (!state.saving) pasteFromClipboard();
   }
 });
