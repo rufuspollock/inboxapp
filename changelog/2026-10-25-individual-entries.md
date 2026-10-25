@@ -6,4 +6,4 @@ promote: false
 
 Inbox now saves every entry as a separate, dated Markdown file, making individual thoughts easier to move into your own system. Existing daily journals upgrade automatically, with the originals kept as a backup.
 
-Included in the next release; the packaged update is not available yet.
+Available in [Inbox 0.2.4](https://github.com/rufuspollock/inboxapp/releases/tag/v0.2.4).
