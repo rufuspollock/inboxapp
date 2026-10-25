@@ -6,6 +6,8 @@
 
 InboxApp is a hyper-minimal macOS inbox for capturing fleeting thoughts in Markdown with near-zero friction. It is designed to be emptied, not to become another knowledge base.
 
+Background: [why capture and processing are separate](docs/background/capture-and-processing.md), including the earlier inbox experiment and its relationship to bookmarking.
+
 🔗 https://tryinbox.app/
 
 📺 Watch the demo https://www.youtube.com/watch?v=JdY6tsNhN30
