@@ -1,3 +1,4 @@
+import { installImageInput, renderPreviews, imagePicker } from "./attachments.js";
 import {
   buildRecentDates,
   formatViewDate,
@@ -17,6 +18,8 @@ const DAY_TILE_GAP = 0;
 
 const state = {
   ready: false,
+  importing: false,
+  draftId: null,
   todayFilename: "",
   todayDate: "",
   todayItems: [],
@@ -35,6 +38,10 @@ const editorEl = document.querySelector("#editor");
 const saveCaptureEl = document.querySelector("#save-capture");
 const captureStatusEl = document.querySelector("#capture-status");
 const DRAFT_KEY = "inboxapp.capture-draft";
+const DRAFT_ID_KEY = "inboxapp.capture-draft-id";
+const capturePreviewsEl = document.querySelector('#capture-previews');
+const attachCaptureEl = document.querySelector('#attach-capture');
+const discardCaptureEl = document.querySelector('#discard-capture');
 const drawerEl = document.querySelector(".drawer");
 const toggleEl = document.querySelector("#drawer-toggle");
 const listEl = document.querySelector("#today-list");
@@ -53,8 +60,11 @@ function setDrawerState(open) {
 }
 
 function updateCaptureControls() {
-  saveCaptureEl.disabled = !state.ready || state.saving || state.itemSaving || !editorEl.value.trim();
-  editorEl.readOnly = state.saving;
+  saveCaptureEl.disabled = !state.ready || state.saving || state.itemSaving || state.importing || !editorEl.value.trim();
+  editorEl.readOnly = state.saving || state.importing;
+  attachCaptureEl.disabled = !state.ready || state.saving || state.itemSaving || state.importing;
+  discardCaptureEl.disabled = attachCaptureEl.disabled;
+  discardCaptureEl.hidden = !editorEl.value && !state.draftId;
   saveCaptureEl.textContent = state.saving ? "Saving…" : "Save";
 }
 
@@ -66,10 +76,13 @@ function persistDraft() {
     captureStatusEl.textContent = "Draft recovery unavailable. Save before quitting.";
   }
   updateCaptureControls();
+  renderPreviews(capturePreviewsEl, editorEl.value, state.draftId, invoke);
 }
 
 function clearEditor() {
   editorEl.value = "";
+  state.draftId = null;
+  try { window.localStorage.removeItem(DRAFT_ID_KEY); } catch {}
   persistDraft();
 }
 
@@ -174,11 +187,11 @@ function renderList() {
     checkbox.type = "checkbox";
     checkbox.className = "drawer__item-checkbox";
     checkbox.checked = parsed.checked;
-    checkbox.disabled = !!state.editing || state.itemSaving;
+    checkbox.disabled = !!state.editing || state.itemSaving || state.importing;
     checkbox.setAttribute("aria-label", "Mark task as done");
     checkbox.addEventListener("change", async (event) => {
       event.stopPropagation();
-      if (state.saving || state.itemSaving || state.editing) return;
+      if (state.saving || state.itemSaving || state.importing || state.editing) return;
       state.itemSaving = true;
       ++viewRequest;
       updateCaptureControls();
@@ -211,10 +224,10 @@ function renderList() {
     text.className = "drawer__item-text";
     text.textContent = displayText(parsed.text);
     text.title = "Edit entry";
-    text.disabled = state.saving || state.itemSaving;
+    text.disabled = state.saving || state.itemSaving || state.importing;
     text.setAttribute("aria-label", `Edit entry: ${displayText(parsed.text)}`);
     text.addEventListener("click", () => {
-      if (state.saving || state.itemSaving) return;
+      if (state.saving || state.itemSaving || state.importing) return;
       if (state.editing) {
         setError("Save or cancel the current edit first");
         return;
@@ -239,10 +252,10 @@ function renderList() {
     del.type = "button";
     del.className = "drawer__item-delete";
     del.textContent = "Delete";
-    del.disabled = !!state.editing || state.itemSaving;
+    del.disabled = !!state.editing || state.itemSaving || state.importing;
     del.addEventListener("click", async (event) => {
       event.stopPropagation();
-      if (state.saving || state.itemSaving || state.editing) return;
+      if (state.saving || state.itemSaving || state.importing || state.editing) return;
       state.itemSaving = true;
       ++viewRequest;
       updateCaptureControls();
@@ -268,7 +281,13 @@ function renderList() {
       }
     });
 
-    row.append(checkbox, text, copy, del);
+    const content = document.createElement('div');
+    content.className = 'drawer__item-content';
+    const previews = document.createElement('div');
+    previews.className = 'attachment-previews';
+    renderPreviews(previews, item, id, invoke);
+    content.append(text, previews);
+    row.append(checkbox, content, copy, del);
     listEl.append(row);
   });
 }
@@ -282,24 +301,26 @@ function renderEditRow(row) {
   field.value = edit.text;
   field.rows = Math.min(8, Math.max(3, edit.text.split("\n").length));
   field.setAttribute("aria-label", "Edit entry");
-  field.readOnly = state.itemSaving;
+  field.readOnly = state.itemSaving || state.importing;
   const actions = document.createElement("div");
   actions.className = "drawer__item-actions";
   const save = document.createElement("button");
   save.className = "drawer__item-save";
   save.type = "button";
   save.textContent = state.itemSaving ? "Saving…" : "Save";
-  save.disabled = state.itemSaving || !edit.text.trim();
+  save.disabled = state.itemSaving || state.importing || !edit.text.trim();
   const cancel = document.createElement("button");
   cancel.className = "drawer__item-cancel";
   cancel.type = "button";
   cancel.textContent = "Cancel";
-  cancel.disabled = state.itemSaving;
+  cancel.disabled = state.itemSaving || state.importing;
   field.addEventListener("input", () => {
     edit.text = field.value;
-    save.disabled = !edit.text.trim() || state.itemSaving;
+    save.disabled = !edit.text.trim() || state.itemSaving || state.importing;
+    renderPreviews(previews, edit.text, edit.id, invoke);
   });
   cancel.addEventListener("click", async () => {
+    if (state.importing) return;
     state.editing = null;
     setError(null);
     renderList();
@@ -321,15 +342,29 @@ function renderEditRow(row) {
     if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
       event.preventDefault();
       saveEditedItem();
-    } else if (event.key === "Escape" && !state.itemSaving) cancel.click();
+    } else if (event.key === "Escape" && !state.itemSaving && !state.importing) cancel.click();
   });
-  actions.append(save, cancel);
-  row.append(field, actions);
+  const previews = document.createElement('div');
+  previews.className = 'attachment-previews';
+  renderPreviews(previews, edit.text, edit.id, invoke);
+  const imageInput = installImageInput(field, {
+    invoke, getId: async () => edit.id, isBusy: imageBusy, setBusy: setImageBusy,
+    onChange: () => { edit.text = field.value; renderPreviews(previews, edit.text, edit.id, invoke); },
+    onStatus: message => setError(message || null),
+  });
+  const picker = imagePicker(document, imageInput.importFile);
+  const attach = document.createElement('button');
+  attach.type = 'button';
+  attach.textContent = 'Attach image';
+  attach.disabled = state.itemSaving || state.importing;
+  attach.addEventListener('click', () => picker.click());
+  actions.append(attach, save, cancel);
+  row.append(field, previews, picker, actions);
 }
 
 async function saveEditedItem() {
   const edit = state.editing;
-  if (!edit || state.saving || state.itemSaving || !edit.text.trim()) return;
+  if (!edit || state.saving || state.itemSaving || state.importing || !edit.text.trim()) return;
   state.itemSaving = true;
       ++viewRequest;
   updateCaptureControls();
@@ -346,7 +381,7 @@ async function saveEditedItem() {
     console.error("update_item_for_date failed", error);
     setError(String(error).includes("changed elsewhere") || String(error).includes("no longer exists")
       ? "Entry changed elsewhere. Cancel, reopen the day, then edit again."
-      : "Save failed — your edit is still here");
+      : `Save failed — your edit is still here. ${String(error.message || error)}`);
   } finally {
     state.itemSaving = false;
     updateCaptureControls();
@@ -449,23 +484,43 @@ async function copyText(text) {
   }
 }
 
-async function pasteFromClipboard() {
+function imageBusy() { return !state.ready || state.saving || state.itemSaving || state.importing; }
+
+function setImageBusy(busy) {
+  state.importing = busy;
+  updateCaptureControls();
+  if (busy) {
+    listEl.querySelectorAll('button, input').forEach(element => {element.disabled = true;});
+    listEl.querySelectorAll('textarea').forEach(element => {element.readOnly = true;});
+  } else if (state.editing) {
+    const field = listEl.querySelector('.drawer__item-editor');
+    if (field) field.readOnly = false;
+    listEl.querySelectorAll('.drawer__item-actions button').forEach(button => {button.disabled = false;});
+    const save = listEl.querySelector('.drawer__item-save');
+    if (save) save.disabled = !state.editing.text.trim();
+  } else renderList();
+}
+
+async function ensureDraftId() {
+  if (state.draftId) return state.draftId;
+  const id = await invoke('new_entry_id');
+  // Persist ownership before importing bytes; a recovered draft must find its images.
+  try { window.localStorage.setItem(DRAFT_ID_KEY, id); }
+  catch { await invoke('discard_draft', {id}); throw new Error('Draft recovery unavailable. Restart before attaching images.'); }
+  state.draftId = id;
+  return id;
+}
+
+async function discardCapture() {
+  if (imageBusy()) return;
+  state.importing = true;
+  updateCaptureControls();
   try {
-    const text = await invoke("plugin:clipboard-manager|read_text");
-    if (!text || state.saving) {
-      return;
-    }
-    const start = editorEl.selectionStart;
-    const end = editorEl.selectionEnd;
-    const value = editorEl.value;
-    editorEl.value = value.slice(0, start) + text + value.slice(end);
-    const cursor = start + text.length;
-    editorEl.setSelectionRange(cursor, cursor);
-    persistDraft();
-  } catch (error) {
-    console.error("clipboard read failed", error);
-    setError("Paste failed");
-  }
+    if (state.draftId) await invoke('discard_draft', {id: state.draftId});
+    clearEditor();
+    captureStatusEl.textContent = 'Draft discarded';
+  } catch (error) { captureStatusEl.textContent = `Could not discard draft — ${String(error.message || error)}`; }
+  finally { state.importing = false; updateCaptureControls(); }
 }
 
 async function loadTodayItems() {
@@ -525,7 +580,7 @@ async function setViewDate(date) {
     setError("Save or cancel your edit before switching days");
     return;
   }
-  if (state.saving || state.itemSaving || state.viewDate === date) {
+  if (state.saving || state.itemSaving || state.importing || state.viewDate === date) {
     historyDateEl.value = state.viewDate;
     return;
   }
@@ -557,13 +612,10 @@ async function setViewDate(date) {
 }
 
 async function saveCapture() {
-  if (!state.ready) return;
+  if (imageBusy()) return;
   const rawText = editorEl.value;
-  if (!rawText.trim()) {
-    clearEditor();
-    return;
-  }
-  if (state.saving || state.itemSaving) {
+  if (!rawText.trim()) return;
+  if (state.saving || state.itemSaving || state.importing) {
     return;
   }
   state.saving = true;
@@ -577,26 +629,26 @@ async function saveCapture() {
   try {
     const saved = await invoke("append_today_item", {
       text: trimmedText,
+      id: await ensureDraftId(),
     });
-    state.todayItems.push(saved.entry);
-    syncTodayCount();
-
-    if (state.viewDate === state.todayDate) {
-      state.viewItems = state.todayItems;
-      updateCount();
-      renderList();
+    if (saved.date === state.todayDate) {
+      state.todayItems = [...state.todayItems.filter(entry => entry.id !== saved.entry.id), saved.entry];
+      syncTodayCount();
+      if (state.viewDate === state.todayDate) state.viewItems = state.todayItems;
     } else {
-      await setViewDate(state.viewDate);
+      state.dayCounts.set(saved.date, saved.counts.current);
+      if (state.viewDate === saved.date) state.viewItems = [...state.viewItems.filter(entry => entry.id !== saved.entry.id), saved.entry];
     }
-
+    updateCount();
+    renderList();
     renderDayStrip();
     clearEditor();
     setDrawerState(true);
-    captureStatusEl.textContent = "Saved to Today";
+    captureStatusEl.textContent = saved.date === state.todayDate ? 'Saved to Today' : `Saved to ${saved.date}`;
     setError(null);
   } catch (error) {
     console.error("append_today_item failed", error);
-    captureStatusEl.textContent = "Save failed — your draft is still here";
+    captureStatusEl.textContent = `Save failed — your draft is still here. ${String(error.message || error)}`;
   } finally {
     state.saving = false;
     updateCaptureControls();
@@ -611,6 +663,8 @@ async function handleFocus() {
 async function boot() {
   try {
     editorEl.value = window.localStorage.getItem(DRAFT_KEY) || "";
+    state.draftId = window.localStorage.getItem(DRAFT_ID_KEY) || null;
+    renderPreviews(capturePreviewsEl, editorEl.value, state.draftId, invoke);
   } catch (error) {
     captureStatusEl.textContent = "Draft recovery unavailable. Save before quitting.";
   }
@@ -664,9 +718,14 @@ editorEl.addEventListener("keydown", (event) => {
     saveCapture();
     return;
   }
-  if (event.metaKey && event.key.toLowerCase() === "v") {
-    event.preventDefault();
-    event.stopPropagation();
-    if (!state.saving) pasteFromClipboard();
-  }
+
 });
+
+const captureImages = installImageInput(editorEl, {
+  invoke, getId: ensureDraftId, isBusy: imageBusy, setBusy: setImageBusy,
+  onChange: persistDraft, onStatus: message => {captureStatusEl.textContent = message;},
+});
+const capturePicker = imagePicker(document, captureImages.importFile);
+attachCaptureEl.after(capturePicker);
+attachCaptureEl.addEventListener('click', () => capturePicker.click());
+discardCaptureEl.addEventListener('click', discardCapture);

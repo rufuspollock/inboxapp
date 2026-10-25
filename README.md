@@ -13,10 +13,11 @@ InboxApp is a hyper-minimal macOS inbox for capturing fleeting thoughts in Markd
 ## Key Features
 
 - Single, distraction-free writing surface with raw Markdown.
-- Explicit Save button or `⌘+Enter` to capture a thought into today’s Markdown file.
+- Explicit Save button or `⌘+Enter` to capture a thought into its own dated Markdown file.
 - Drafts stay put when switching apps and recover after restarting.
 - Click any saved entry to edit it with Save/Cancel; use the date picker to open older days.
-- Local, offline storage in human-readable files at `~/.inboxapp`.
+- Paste screenshots or attach PNG, JPEG, and WebP images, with small previews.
+- Local, offline storage in human-readable files at `~/.inboxapp`. Each entry owns its attachments.
 - Ultra-lightweight UI that resembles a blank page (black/white, minimalist).
 - Today’s item count shown in the native window title as `Inbox — N`.
 - No AI, no tagging, no organization: just capture and move on.
@@ -82,13 +83,13 @@ npm run dev
 
 ### Run Rust tests
 ```bash
-cargo test
+cargo test --manifest-path src-tauri/Cargo.toml
 ```
 
 ### Project layout
 - `src/` - frontend (HTML/CSS/JS)
 - `src-tauri/` - backend (Rust/Tauri)
-- `~/.inboxapp/` - local storage (daily Markdown files)
+- `~/.inboxapp/` - local storage (individual Markdown entries and owned assets)
 
 ## Design Principles
 - Capture only, no processing inside the app.
@@ -100,3 +101,49 @@ cargo test
 - Long-term storage or knowledge management.
 - Rich editing, rendered Markdown, or inline formatting.
 - Sync, automation, or AI features.
+
+## Storage and upgrades
+
+Each thought is a plain Markdown file, such as `2026-10-25-0001.md`. The date and
+stable per-day sequence are in its filename; the day picker groups these files.
+Separators (`---`) inside new entries are ordinary Markdown, not entry boundaries.
+
+```text
+~/.inboxapp/
+  config.yml                       # schema_version and next ID sequences
+  2026-10-25-0001.md                # one entry
+  assets/2026-10-25-0001/           # images owned by that entry
+  .drafts/                         # reserved draft IDs
+  .trash/2026-10-25-0001/           # deleted entry + its assets, as a bundle
+  legacy-backup-v1/                # original daily files and migration manifest
+```
+
+On the first launch of this version, existing daily files upgrade automatically.
+The app keeps the originals (including the old `trash.md`) in `legacy-backup-v1/`
+and resumes an interrupted upgrade without duplicating entries. If files changed
+during an interrupted upgrade, or the storage version is newer than this app,
+it reports an error rather than overwriting anything. Keep the backup until you
+have verified your migrated entries. Do not run an older app version against the
+upgraded folder.
+
+Delete moves the entry and its own image folder into `.trash/<entry-id>/`, retaining
+working relative links inside that bundle. Recovery is manual for now: move the
+Markdown file back to the storage root and its `assets/<entry-id>/` folder back
+under root `assets/`, without overwriting existing files. Permanently removing a
+trash bundle removes that entry's attachments too. Legacy trash remains in the
+migration backup.
+
+Images are written locally before their Markdown links are inserted. Screenshot
+clipboard data becomes PNG; PNG/JPEG/WebP files retain their bytes. Imports are
+limited to 20 MB and 40 million pixels. Draft text and its reserved entry ID recover
+across restarts; **Discard draft** removes its unsaved assets. Removing an image
+link or cancelling an edit keeps the entry's image files until the whole entry is
+deleted, so a cancelled edit cannot break an existing link.
+
+To move a thought elsewhere, copy its Markdown file **and** matching
+`assets/<entry-id>/` folder, preserving their relative layout. Copy and Copy all
+copy Markdown text only; they do not transfer image files. Pasting a copied entry’s
+image links into another entry is rejected on Save; attach a fresh copy so deleting
+the original cannot break it. Attachment-aware export
+is not yet implemented. See [the website changelog](https://tryinbox.app/changelog/)
+and [website publishing instructions](site/README.md).

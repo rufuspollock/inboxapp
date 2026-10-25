@@ -6,6 +6,7 @@ mod storage_tests;
 
 use serde::Serialize;
 use tauri::{image::Image, menu::Menu, tray::TrayIconEvent, Manager, Wry};
+use tauri_plugin_clipboard_manager::ClipboardExt;
 
 static STORAGE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
@@ -190,6 +191,37 @@ fn delete_item_for_date(
     Ok(updated)
 }
 
+#[tauri::command]
+async fn import_attachment(id: String, bytes: Vec<u8>) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        with_storage(|root| storage::import_attachment(root, &id, &bytes))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn read_attachment(id: String, path: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        with_storage(|root| storage::read_attachment(root, &id, &path))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn paste_image(app: tauri::AppHandle, id: String) -> Result<Option<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let image = match app.clipboard().read_image() {
+            Ok(image) => image,
+            Err(error) if error.to_string() == "The clipboard contents were not available in the requested format or the clipboard is empty." => return Ok(None),
+            Err(error) => return Err(format!("Cannot read clipboard image: {error}")),
+        };
+        let bytes = storage::encode_clipboard_image(image.width(), image.height(), image.rgba().to_vec()).map_err(|e| e.to_string())?;
+        with_storage(|root| storage::import_attachment(root, &id, &bytes)).map(Some)
+    }).await.map_err(|e| e.to_string())?
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -205,7 +237,7 @@ pub fn run() {
                     .title(format_tray_title(count))
                     .on_tray_icon_event(|tray: &tauri::tray::TrayIcon<Wry>, event| {
                         if matches!(event, TrayIconEvent::Click { .. }) {
-                            toggle_main_window(&tray.app_handle());
+                            toggle_main_window(tray.app_handle());
                         }
                     });
                 #[cfg(target_os = "macos")]
@@ -216,10 +248,13 @@ pub fn run() {
             }
             Ok(())
         })
-        .menu(|app| Menu::default(app))
+        .menu(Menu::default)
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
+            import_attachment,
+            read_attachment,
+            paste_image,
             new_entry_id,
             discard_draft,
             get_today_items,

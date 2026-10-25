@@ -411,6 +411,7 @@ pub fn append_entry(
         }
         None => reserve_entry_id(root, date)?,
     };
+    validate_asset_ownership(&id, text)?;
     let entry = Entry {
         id: id.clone(),
         text: text.trim_end().into(),
@@ -441,12 +442,17 @@ pub fn update_entry(
     if text.trim().is_empty() {
         return Err(invalid("Cannot save an empty entry"));
     }
+    validate_asset_ownership(id, text)?;
     let mut result = day_items(root, date)?;
     if read_entry(root, id)?.text != expected {
         return Err(invalid("Entry changed elsewhere; reopen it before saving"));
     }
     atomic_write(&root.join(format!("{id}.md")), body(text).as_bytes(), true)?;
-    for entry in &mut result.items { if entry.id == id { entry.text = text.trim_end().into(); } }
+    for entry in &mut result.items {
+        if entry.id == id {
+            entry.text = text.trim_end().into();
+        }
+    }
     Ok(result)
 }
 
@@ -490,8 +496,7 @@ fn finish_trash(root: &Path, id: &str) -> io::Result<()> {
     }
     // The committed bundle is the recovery marker; only clean assets if active entry is gone.
     if final_path.join(&name).is_file() && !root.join(&name).exists() {
-        let assets = root.join("assets").join(id);
-        if assets.exists() {
+        if let Some(assets) = asset_directory(root, id, false)? {
             fs::remove_dir_all(assets)?;
         }
         let reservation = root.join(".drafts").join(id);
@@ -528,8 +533,7 @@ pub fn delete_entry(root: &Path, date: &str, id: &str, expected: &str) -> io::Re
         return Err(invalid("Trash entry already exists"));
     }
     fs::create_dir_all(&pending)?;
-    let assets = root.join("assets").join(id);
-    if assets.exists() {
+    if let Some(assets) = asset_directory(root, id, false)? {
         copy_tree(&assets, &pending.join("assets").join(id))?;
     }
     if read_entry(root, id)?.text != expected {
@@ -564,9 +568,170 @@ pub fn discard_draft(root: &Path, id: &str) -> io::Result<()> {
     if !reservation.is_file() {
         return Err(invalid("Draft reservation no longer exists"));
     }
-    let assets = root.join("assets").join(id);
-    if assets.exists() {
+    if let Some(assets) = asset_directory(root, id, false)? {
         fs::remove_dir_all(assets)?;
     }
     fs::remove_file(reservation)
+}
+
+const MAX_IMAGE_BYTES: usize = 20 * 1024 * 1024;
+const MAX_IMAGE_PIXELS: u64 = 40_000_000;
+
+fn validate_image(bytes: &[u8]) -> io::Result<(&'static str, &'static str)> {
+    if bytes.len() > MAX_IMAGE_BYTES {
+        return Err(invalid("Image exceeds the 20 MB limit"));
+    }
+    let format =
+        image::guess_format(bytes).map_err(|_| invalid("Choose a PNG, JPEG or WebP image"))?;
+    let kind = match format {
+        image::ImageFormat::Png => ("png", "image/png"),
+        image::ImageFormat::Jpeg => ("jpg", "image/jpeg"),
+        image::ImageFormat::WebP => ("webp", "image/webp"),
+        _ => return Err(invalid("Choose a PNG, JPEG or WebP image")),
+    };
+    let dimensions = image::ImageReader::with_format(io::Cursor::new(bytes), format)
+        .into_dimensions()
+        .map_err(|e| invalid(format!("Cannot read image: {e}")))?;
+    if dimensions.0 == 0
+        || dimensions.1 == 0
+        || u64::from(dimensions.0) * u64::from(dimensions.1) > MAX_IMAGE_PIXELS
+    {
+        return Err(invalid("Image exceeds the 40 megapixel limit"));
+    }
+    let mut reader = image::ImageReader::with_format(io::Cursor::new(bytes), format);
+    let mut limits = image::Limits::default();
+    limits.max_image_width = Some(16000);
+    limits.max_image_height = Some(16000);
+    limits.max_alloc = Some(256 * 1024 * 1024);
+    reader.limits(limits);
+    reader
+        .decode()
+        .map_err(|e| invalid(format!("Cannot decode image: {e}")))?;
+    Ok(kind)
+}
+
+// Generated links remain owned by one entry. A raw Markdown copy cannot silently
+// borrow another entry's attachment because processing that original would break it.
+fn validate_asset_ownership(id: &str, text: &str) -> io::Result<()> {
+    for remainder in text.split("assets/").skip(1) {
+        if let Some((owner, _)) = remainder.split_once('/') {
+            if id_date(owner).is_ok() && owner != id {
+                return Err(invalid("This image belongs to another entry. Attach a copy of the image to this entry instead."));
+            }
+        }
+    }
+    Ok(())
+}
+
+// This check also guards destructive cleanup: checking only the final directory
+// would follow a symlink in the assets parent into an unrelated external folder.
+fn asset_directory(root: &Path, id: &str, create: bool) -> io::Result<Option<PathBuf>> {
+    id_date(id)?;
+    let mut path = root.to_path_buf();
+    for component in ["assets", id] {
+        path.push(component);
+        match fs::symlink_metadata(&path) {
+            Ok(metadata) if metadata.is_dir() && !metadata.file_type().is_symlink() => {}
+            Ok(_) => {
+                return Err(invalid(
+                    "Attachment directory must be an ordinary local folder",
+                ))
+            }
+            Err(e) if e.kind() == io::ErrorKind::NotFound && create => {
+                fs::create_dir(&path)?;
+                fs::File::open(path.parent().unwrap())?.sync_all()?;
+            }
+            Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(None),
+            Err(e) => return Err(e),
+        }
+    }
+    Ok(Some(path))
+}
+
+fn owned_asset_dir(root: &Path, id: &str, create: bool) -> io::Result<PathBuf> {
+    id_date(id)?;
+    if !root.join(format!("{id}.md")).is_file() && !root.join(".drafts").join(id).is_file() {
+        return Err(invalid("Entry or draft no longer exists"));
+    }
+    asset_directory(root, id, create)?.ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::NotFound,
+            "Attachment folder no longer exists",
+        )
+    })
+}
+
+pub fn import_attachment(root: &Path, id: &str, bytes: &[u8]) -> io::Result<String> {
+    let (extension, _) = validate_image(bytes)?;
+    let directory = owned_asset_dir(root, id, true)?;
+    let mut sequence = 1u64;
+    loop {
+        let name = format!("image-{sequence:04}.{extension}");
+        match atomic_write(&directory.join(&name), bytes, false) {
+            Ok(()) => return Ok(format!("assets/{id}/{name}")),
+            Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {
+                sequence = sequence
+                    .checked_add(1)
+                    .ok_or_else(|| invalid("Too many attachments"))?
+            }
+            Err(e) => return Err(e),
+        }
+    }
+}
+
+pub fn read_attachment(root: &Path, id: &str, relative: &str) -> io::Result<String> {
+    use base64::Engine;
+    let directory = owned_asset_dir(root, id, false)?;
+    let prefix = format!("assets/{id}/");
+    let name = relative
+        .strip_prefix(&prefix)
+        .ok_or_else(|| invalid("Attachment belongs to another entry"))?;
+    if name.is_empty()
+        || name == "."
+        || name == ".."
+        || !name
+            .bytes()
+            .all(|c| c.is_ascii_alphanumeric() || c == b'-' || c == b'.')
+    {
+        return Err(invalid("Invalid attachment path"));
+    }
+    let path = directory.join(name);
+    let metadata = fs::symlink_metadata(&path)?;
+    if !metadata.is_file()
+        || metadata.file_type().is_symlink()
+        || metadata.len() > MAX_IMAGE_BYTES as u64
+    {
+        return Err(invalid("Attachment must be a local image under 20 MB"));
+    }
+    let bytes = fs::read(path)?;
+    let (_, mime) = validate_image(&bytes)?;
+    Ok(format!(
+        "data:{mime};base64,{}",
+        base64::engine::general_purpose::STANDARD.encode(bytes)
+    ))
+}
+
+pub fn encode_clipboard_image(width: u32, height: u32, rgba: Vec<u8>) -> io::Result<Vec<u8>> {
+    let pixels = u64::from(width) * u64::from(height);
+    if pixels == 0
+        || pixels > MAX_IMAGE_PIXELS
+        || width > 16000
+        || height > 16000
+        || pixels * 4 != rgba.len() as u64
+    {
+        return Err(invalid(
+            "Clipboard image is invalid or exceeds the 40 megapixel limit",
+        ));
+    }
+    let image = image::RgbaImage::from_raw(width, height, rgba)
+        .ok_or_else(|| invalid("Invalid clipboard image"))?;
+    let mut buffer = io::Cursor::new(Vec::new());
+    image::DynamicImage::ImageRgba8(image)
+        .write_to(&mut buffer, image::ImageFormat::Png)
+        .map_err(|e| invalid(format!("Cannot encode clipboard image: {e}")))?;
+    let bytes = buffer.into_inner();
+    if bytes.len() > MAX_IMAGE_BYTES {
+        return Err(invalid("Image exceeds the 20 MB limit"));
+    }
+    Ok(bytes)
 }

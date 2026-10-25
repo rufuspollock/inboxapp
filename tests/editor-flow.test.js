@@ -9,7 +9,7 @@ const past = `${pastDate.getFullYear()}-${String(pastDate.getMonth() + 1).padSta
 const html = await readFile(new URL('../src/index.html', import.meta.url), 'utf8');
 let sequence = 0;
 const settle = () => new Promise(resolve => setImmediate(resolve));
-async function app({ draft, failSave = false, todayItems = [], pastItems = [], onInvoke } = {}) {
+async function app({ draft, draftId, failSave = false, todayItems = [], pastItems = [], onInvoke } = {}) {
   const dom = new JSDOM(html, { url: 'http://inbox.local' });
   globalThis.window = dom.window;
   globalThis.document = dom.window.document;
@@ -21,6 +21,7 @@ async function app({ draft, failSave = false, todayItems = [], pastItems = [], o
   todayItems = entries(todayItems, date);
   pastItems = entries(pastItems, past);
   if (draft) window.localStorage.setItem('inboxapp.capture-draft', draft);
+  if (draftId) window.localStorage.setItem('inboxapp.capture-draft-id', draftId);
   window.__TAURI__ = { core: { invoke: async (command, args) => {
     calls.push({ command, args });
     if (onInvoke) { const result = onInvoke(command, args); if (result !== undefined) return result; }
@@ -28,6 +29,7 @@ async function app({ draft, failSave = false, todayItems = [], pastItems = [], o
     if (command === 'list_day_counts') return [{ date: past, count: pastItems.length }];
     if (command === 'get_items_for_date') return { date: args.date, items: [...pastItems] };
     if (failSave && ['append_today_item', 'update_item_for_date'].includes(command)) throw new Error('Disk full');
+    if (command === 'new_entry_id') return `${date}-0003`;
     if (command === 'delete_item_for_date') return {date: args.date, items: todayItems.filter(item => item.id !== args.id)};
     if (command === 'append_today_item') return { date, entry: {id: `${date}-0003`, text: args.text}, counts: {} };
     if (command === 'update_item_for_date') return { date: args.date, items: pastItems.map(item => item.id === args.id ? {...item, text: args.item} : item) };
@@ -215,4 +217,122 @@ test('storage initialization failure is visible beside capture and prevents savi
   editor.dispatchEvent(new window.KeyboardEvent('keydown', {key: 'Enter', metaKey: true}));
   await settle();
   assert.equal(calls.filter(c => c.command === 'append_today_item').length, 0);
+});
+
+test('pasted image draft keeps its entry ID for save and shows a preview', async () => {
+  const {editor, calls} = await app({onInvoke: (command, args) => {
+    if (command === 'new_entry_id') return '2026-10-25-0008';
+    if (command === 'paste_image') return 'assets/2026-10-25-0008/image-1.png';
+    if (command === 'read_attachment') return 'data:image/png;base64,aGVsbG8=';
+  }});
+  editor.dispatchEvent(new window.KeyboardEvent('keydown', {key: 'v', metaKey: true}));
+  await settle();
+  assert.match(editor.value, /!\[Image\]\(assets\/2026-10-25-0008/);
+  assert.equal(window.localStorage.getItem('inboxapp.capture-draft-id'), '2026-10-25-0008');
+  assert.equal(document.querySelectorAll('#capture-previews img').length, 1);
+  document.querySelector('#save-capture').click();
+  await settle();
+  assert.equal(calls.find(c => c.command === 'append_today_item').args.id, '2026-10-25-0008');
+  assert.equal(window.localStorage.getItem('inboxapp.capture-draft-id'), null);
+});
+
+test('discard removes draft attachments without creating an entry', async () => {
+  const {editor, calls} = await app({onInvoke: command => {
+    if (command === 'new_entry_id') return '2026-10-25-0008';
+    if (command === 'paste_image') return 'assets/2026-10-25-0008/image-1.png';
+  }});
+  editor.dispatchEvent(new window.KeyboardEvent('keydown', {key: 'v', metaKey: true}));
+  await settle();
+  document.querySelector('#discard-capture').click();
+  await settle();
+  assert.deepEqual(calls.find(c => c.command === 'discard_draft').args, {id:'2026-10-25-0008'});
+  assert.equal(editor.value, '');
+  assert.equal(calls.filter(c => c.command === 'append_today_item').length, 0);
+});
+
+test('image import into an old entry targets its ID and cancel keeps the saved entry', async () => {
+  const {calls} = await openPast({onInvoke: command => {
+    if (command === 'paste_image') return `assets/${past}-0001/image-1.png`;
+  }});
+  const editor = document.querySelector('.drawer__item-editor');
+  editor.dispatchEvent(new window.KeyboardEvent('keydown', {key: 'v', metaKey: true}));
+  await settle();
+  assert.equal(calls.find(c => c.command === 'paste_image').args.id, `${past}-0001`);
+  document.querySelector('.drawer__item-cancel').click();
+  await settle();
+  assert.equal(calls.filter(c => c.command === 'discard_draft').length, 0);
+  assert.match(document.querySelector('#today-list').textContent, /Original/);
+});
+
+test('Command+Enter during first image import cannot clear its draft ownership', async () => {
+  let finishPaste;
+  const {editor, calls} = await app({onInvoke: command => {
+    if (command === 'new_entry_id') return '2026-10-25-0008';
+    if (command === 'paste_image') return new Promise(resolve => {finishPaste = resolve;});
+  }});
+  editor.dispatchEvent(new window.KeyboardEvent('keydown', {key: 'v', metaKey: true}));
+  await settle();
+  editor.dispatchEvent(new window.KeyboardEvent('keydown', {key: 'Enter', metaKey: true}));
+  assert.equal(window.localStorage.getItem('inboxapp.capture-draft-id'), '2026-10-25-0008');
+  finishPaste('assets/2026-10-25-0008/image-1.png');
+  await settle();
+  document.querySelector('#save-capture').click();
+  await settle();
+  assert.equal(calls.find(c => c.command === 'append_today_item').args.id, '2026-10-25-0008');
+});
+
+test('image paste keeps focus and caret in the existing entry editor', async () => {
+  await openPast({onInvoke: command => command === 'paste_image' ? `assets/${past}-0001/image-1.png` : undefined});
+  const editor = document.querySelector('.drawer__item-editor');
+  editor.setSelectionRange(0, 0);
+  editor.dispatchEvent(new window.KeyboardEvent('keydown', {key: 'v', metaKey: true}));
+  await settle();
+  assert.equal(document.activeElement, document.querySelector('.drawer__item-editor'));
+  assert.equal(document.activeElement.selectionStart, `![Image](assets/${past}-0001/image-1.png)`.length);
+});
+
+test('image paste does not hide a draft recovery storage failure', async (t) => {
+  const {editor} = await app({onInvoke: command => {
+    if (command === 'new_entry_id') return '2026-10-25-0008';
+    if (command === 'paste_image') return 'assets/2026-10-25-0008/image-1.png';
+  }});
+  const setItem = window.Storage.prototype.setItem;
+  t.mock.method(window.Storage.prototype, 'setItem', function(key, value) {
+    if (key === 'inboxapp.capture-draft') throw new Error('Quota exceeded');
+    return setItem.call(this, key, value);
+  });
+  editor.dispatchEvent(new window.KeyboardEvent('keydown', {key: 'v', metaKey: true}));
+  await settle();
+  assert.match(document.querySelector('#capture-status').textContent, /Draft recovery unavailable/);
+  assert.match(editor.value, /!\[Image\]/);
+});
+
+
+test('recovered image draft keeps its original day after midnight and saves without a new ID', async () => {
+  const id = `${past}-0008`;
+  const draft = `![Image](assets/${id}/image-0001.png)`;
+  const {calls} = await app({draft, draftId: id, onInvoke: (command, args) => {
+    if (command === 'read_attachment') return 'data:image/png;base64,aGVsbG8=';
+    if (command === 'append_today_item') return {entry:{id, text:args.text}, date:past, counts:{current:1}};
+  }});
+  assert.equal(document.querySelectorAll('#capture-previews img').length, 1);
+  document.querySelector('#save-capture').click();
+  await settle();
+  assert.equal(calls.filter(c => c.command === 'new_entry_id').length, 0);
+  assert.equal(calls.find(c => c.command === 'append_today_item').args.id, id);
+  assert.match(document.querySelector('#capture-status').textContent, new RegExp(past));
+  assert.equal(document.querySelector('#today-count').textContent, '0');
+  assert.equal(window.localStorage.getItem('inboxapp.capture-draft-id'), null);
+});
+
+test('a failed draft discard leaves its text and ownership available', async (t) => {
+  t.mock.method(console, 'error', () => {});
+  const {editor} = await app({draft:'Keep me', draftId:'2026-10-25-0008', onInvoke: command => {
+    if (command === 'discard_draft') throw new Error('Permission denied');
+  }});
+  document.querySelector('#discard-capture').click();
+  await settle();
+  assert.equal(editor.value, 'Keep me');
+  assert.equal(window.localStorage.getItem('inboxapp.capture-draft-id'), '2026-10-25-0008');
+  assert.match(document.querySelector('#capture-status').textContent, /Could not discard/);
 });
