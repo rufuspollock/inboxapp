@@ -4,6 +4,15 @@
 - Edit entries from any day with Save/Cancel and a date picker for older journals.
 - Keep drafts and edits intact when a disk write fails.
 
+## [0.2.4](https://github.com/rufuspollock/inboxapp/compare/v0.2.3...v0.2.4) (2026-10-25)
+
+
+### Features
+
+* paste images with entry-owned attachments and previews ([c135029](https://github.com/rufuspollock/inboxapp/commit/c13502916ff53de1bd2ab4f304223dc199702cc8))
+* publish reader changelog on website and use Dolt-only issue sync ([7ed78d1](https://github.com/rufuspollock/inboxapp/commit/7ed78d1ebe493655b163032c167a002876ab655a))
+* store each entry separately with resumable journal migration ([433c1f7](https://github.com/rufuspollock/inboxapp/commit/433c1f75b6555a3bb9b48645113d1c48e809b9ae))
+
 ### 2026-01-13 ✨
 
 - Copying items now outputs Markdown checkboxes (checked state preserved).
