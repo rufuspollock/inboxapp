@@ -1,0 +1,26 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "flat-type-hierarchy",
+        "value": "*",
+        "files": [
+          "site/index.html"
+        ],
+        "createdAt": "2026-10-25T14:16:47.607Z",
+        "reason": "Agent review: detector reports all roles as 16px, but existing Tailwind h1 text-3xl/sm:text-5xl is 30/48px versus body text-base/sm:text-lg at 16/18px; the heading hierarchy is already substantially greater than 1.25x."
+      },
+      {
+        "rule": "nested-cards",
+        "value": "*",
+        "files": [
+          "site/index.html"
+        ],
+        "createdAt": "2026-10-25T14:16:47.793Z",
+        "reason": "Agent review: nested bordered divs form the existing illustrative app window, including its title bar and editor pane. These are intentional product-demo elements, not nested content cards; this session only added a footer changelog link."
+      }
+    ]
+  }
+}
