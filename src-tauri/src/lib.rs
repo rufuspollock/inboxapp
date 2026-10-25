@@ -5,19 +5,42 @@ mod storage;
 mod storage_tests;
 
 use serde::Serialize;
-use tauri::{image::Image, menu::Menu, Manager, Wry, tray::TrayIconEvent};
+use tauri::{image::Image, menu::Menu, tray::TrayIconEvent, Manager, Wry};
 
-#[derive(Serialize)]
-struct FileList {
-    files: Vec<String>,
-    counts: storage::Counts,
-}
+static STORAGE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 #[derive(Serialize)]
 struct TodayItems {
+    date: String,
     filename: String,
-    items: Vec<String>,
+    items: Vec<storage::Entry>,
     counts: storage::Counts,
+}
+#[derive(Serialize)]
+struct SavedEntry {
+    entry: storage::Entry,
+    date: String,
+    counts: storage::Counts,
+}
+
+fn with_storage<T>(
+    operation: impl FnOnce(&std::path::Path) -> std::io::Result<T>,
+) -> Result<T, String> {
+    let _guard = STORAGE_LOCK
+        .lock()
+        .map_err(|_| "Storage lock unavailable".to_string())?;
+    let root = storage::storage_root();
+    std::fs::create_dir_all(&root).map_err(|e| e.to_string())?;
+    let lock = std::fs::OpenOptions::new()
+        .create(true)
+        .read(true)
+        .write(true)
+        .truncate(false)
+        .open(root.join(".storage.lock"))
+        .map_err(|e| e.to_string())?;
+    lock.lock().map_err(|e| e.to_string())?;
+    storage::initialize(&root).map_err(|e| e.to_string())?;
+    operation(&root).map_err(|e| e.to_string())
 }
 
 fn today_string() -> String {
@@ -47,7 +70,6 @@ mod tray_title_tests {
     fn formats_window_title_with_count() {
         assert_eq!(format_window_title(7), "Inbox — 7");
     }
-
 }
 
 fn toggle_main_window(app: &tauri::AppHandle) {
@@ -75,87 +97,77 @@ fn set_window_title(app: &tauri::AppHandle, count: usize) {
 }
 
 #[tauri::command]
-fn get_active_file(app: tauri::AppHandle) -> storage::ActiveFile {
-    let root = storage::storage_root();
-    let active = storage::get_active_file_for_date(&root, &today_string());
-    set_tray_title(&app, active.counts.current);
-    set_window_title(&app, active.counts.current);
-    active
+fn get_today_items(app: tauri::AppHandle) -> Result<TodayItems, String> {
+    let date = today_string();
+    let data = with_storage(|root| {
+        Ok(TodayItems {
+            filename: format!("{date}.md"),
+            items: storage::read_items_for_date(root, &date)?,
+            counts: storage::counts(root, &date)?,
+            date: date.clone(),
+        })
+    })?;
+    set_tray_title(&app, data.counts.current);
+    set_window_title(&app, data.counts.current);
+    Ok(data)
 }
 
 #[tauri::command]
-fn save_active_file(app: tauri::AppHandle, filename: String, text: String) -> storage::Counts {
-    let root = storage::storage_root();
-    let counts = storage::save_active_file(&root, &filename, &text);
-    set_tray_title(&app, counts.current);
-    set_window_title(&app, counts.current);
-    counts
+fn get_items_for_date(app: tauri::AppHandle, date: String) -> Result<storage::DayItems, String> {
+    let data = with_storage(|root| storage::day_items(root, &date))?;
+    set_window_title(&app, data.count);
+    Ok(data)
 }
 
 #[tauri::command]
-fn list_files(app: tauri::AppHandle) -> FileList {
-    let root = storage::storage_root();
-    let active = storage::get_active_file_for_date(&root, &today_string());
-    let files = storage::list_markdown_files(&root);
-    set_tray_title(&app, active.counts.current);
-    set_window_title(&app, active.counts.current);
+fn list_day_counts() -> Result<Vec<storage::DayCount>, String> {
+    with_storage(storage::list_day_counts)
+}
 
-    FileList {
-        files,
-        counts: active.counts,
+#[tauri::command]
+fn new_entry_id() -> Result<String, String> {
+    with_storage(|root| storage::reserve_entry_id(root, &today_string()))
+}
+
+#[tauri::command]
+fn discard_draft(id: String) -> Result<(), String> {
+    with_storage(|root| storage::discard_draft(root, &id))
+}
+
+#[tauri::command]
+fn append_today_item(
+    app: tauri::AppHandle,
+    text: String,
+    id: Option<String>,
+) -> Result<SavedEntry, String> {
+    let date = match id.as_deref() {
+        Some(id) => storage::id_date(id).map_err(|e| e.to_string())?.to_string(),
+        None => today_string(),
+    };
+    let result = with_storage(|root| {
+        Ok(SavedEntry {
+            entry: storage::append_entry(root, &date, &text, id.as_deref())?,
+            counts: storage::counts(root, &date)?,
+            date: date.clone(),
+        })
+    })?;
+    if date == today_string() {
+        set_tray_title(&app, result.counts.current);
     }
-}
-
-#[tauri::command]
-fn get_today_items(app: tauri::AppHandle) -> TodayItems {
-    let root = storage::storage_root();
-    let active = storage::get_active_file_for_date(&root, &today_string());
-    let items = storage::split_items(&active.text);
-    set_tray_title(&app, active.counts.current);
-    set_window_title(&app, active.counts.current);
-
-    TodayItems {
-        filename: active.filename,
-        items,
-        counts: active.counts,
-    }
-}
-
-#[tauri::command]
-fn get_items_for_date(app: tauri::AppHandle, date: String) -> storage::DayItems {
-    let root = storage::storage_root();
-    let items = storage::read_items_for_date(&root, &date);
-    let count = items.len();
-    set_window_title(&app, count);
-
-    storage::DayItems { date, items, count }
-}
-
-#[tauri::command]
-fn list_day_counts(_app: tauri::AppHandle) -> Vec<storage::DayCount> {
-    let root = storage::storage_root();
-    storage::list_day_counts(&root)
-}
-
-#[tauri::command]
-fn append_today_item(app: tauri::AppHandle, text: String) -> Result<storage::Counts, String> {
-    let root = storage::storage_root();
-    let counts = storage::try_append_item_for_date(&root, &today_string(), &text).map_err(|error| error.to_string())?;
-    set_tray_title(&app, counts.current);
-    set_window_title(&app, counts.current);
-    Ok(counts)
+    set_window_title(&app, result.counts.current);
+    Ok(result)
 }
 
 #[tauri::command]
 fn update_item_for_date(
     app: tauri::AppHandle,
     date: String,
-    index: usize,
+    id: String,
     item: String,
-    expected_item: Option<String>,
+    expected_item: String,
 ) -> Result<storage::DayItems, String> {
-    let root = storage::storage_root();
-    let updated = storage::try_update_item_for_date(&root, &date, index, &item, expected_item.as_deref()).map_err(|error| error.to_string())?;
+    let updated =
+        with_storage(|root| storage::update_entry(root, &date, &id, &item, &expected_item))?;
     if date == today_string() {
         set_tray_title(&app, updated.count);
     }
@@ -164,14 +176,18 @@ fn update_item_for_date(
 }
 
 #[tauri::command]
-fn delete_item_for_date(app: tauri::AppHandle, date: String, index: usize) -> storage::DayItems {
-    let root = storage::storage_root();
-    let updated = storage::delete_item_for_date(&root, &date, index);
+fn delete_item_for_date(
+    app: tauri::AppHandle,
+    date: String,
+    id: String,
+    expected_item: String,
+) -> Result<storage::DayItems, String> {
+    let updated = with_storage(|root| storage::delete_entry(root, &date, &id, &expected_item))?;
     if date == today_string() {
         set_tray_title(&app, updated.count);
     }
     set_window_title(&app, updated.count);
-    updated
+    Ok(updated)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -179,20 +195,19 @@ pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
             if let Some(icon) = app.default_window_icon().cloned() {
-                let root = storage::storage_root();
-                let active = storage::get_active_file_for_date(&root, &today_string());
+                // Initialize through the UI commands so migration errors are visible in the window.
+                let count = 0;
                 let tray_icon = Image::from_bytes(include_bytes!("../icons/tray-icon.png"))
                     .map(|image| image.to_owned())
                     .unwrap_or_else(|_| icon.clone());
                 let mut tray_builder = tauri::tray::TrayIconBuilder::<Wry>::with_id("main")
                     .icon(tray_icon)
-                    .title(format_tray_title(active.counts.current))
+                    .title(format_tray_title(count))
                     .on_tray_icon_event(|tray: &tauri::tray::TrayIcon<Wry>, event| {
                         if matches!(event, TrayIconEvent::Click { .. }) {
                             toggle_main_window(&tray.app_handle());
                         }
-                    })
-                    ;
+                    });
                 #[cfg(target_os = "macos")]
                 {
                     tray_builder = tray_builder.icon_as_template(true);
@@ -205,9 +220,8 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
-            get_active_file,
-            save_active_file,
-            list_files,
+            new_entry_id,
+            discard_draft,
             get_today_items,
             append_today_item,
             get_items_for_date,

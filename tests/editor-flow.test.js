@@ -17,6 +17,9 @@ async function app({ draft, failSave = false, todayItems = [], pastItems = [], o
   const calls = [];
   const now = new Date();
   const date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const entries = (items, day) => items.map((item, i) => typeof item === 'string' ? {id: `${day}-${String(i + 1).padStart(4, '0')}`, text: item} : item);
+  todayItems = entries(todayItems, date);
+  pastItems = entries(pastItems, past);
   if (draft) window.localStorage.setItem('inboxapp.capture-draft', draft);
   window.__TAURI__ = { core: { invoke: async (command, args) => {
     calls.push({ command, args });
@@ -25,7 +28,9 @@ async function app({ draft, failSave = false, todayItems = [], pastItems = [], o
     if (command === 'list_day_counts') return [{ date: past, count: pastItems.length }];
     if (command === 'get_items_for_date') return { date: args.date, items: [...pastItems] };
     if (failSave && ['append_today_item', 'update_item_for_date'].includes(command)) throw new Error('Disk full');
-    if (command === 'update_item_for_date') return { date: args.date, items: pastItems.map((item, index) => index === args.index ? args.item : item) };
+    if (command === 'delete_item_for_date') return {date: args.date, items: todayItems.filter(item => item.id !== args.id)};
+    if (command === 'append_today_item') return { date, entry: {id: `${date}-0003`, text: args.text}, counts: {} };
+    if (command === 'update_item_for_date') return { date: args.date, items: pastItems.map(item => item.id === args.id ? {...item, text: args.item} : item) };
     return {};
   } } };
   await import(`../src/main.js?test=${++sequence}`);
@@ -109,7 +114,7 @@ test('editing an old entry preserves date, checked state and multiline text', as
   document.querySelector('.drawer__item-save').click();
   await settle();
   const update = calls.find(c => c.command === 'update_item_for_date');
-  assert.deepEqual(update.args, { date: past, index: 0, item: '- [x] Changed\n\nStill multiline', expectedItem: '- [x] Original\n\nSecond paragraph' });
+  assert.deepEqual(update.args, { date: past, id: `${past}-0001`, item: '- [x] Changed\n\nStill multiline', expectedItem: '- [x] Original\n\nSecond paragraph' });
   assert.equal(document.querySelector('.drawer__item-editor'), null);
 });
 
@@ -157,7 +162,7 @@ test('a pending deletion prevents starting an edit or capture save', async () =>
   document.querySelector('#save-capture').click();
   assert.equal(document.querySelector('.drawer__item-editor'), null);
   assert.equal(calls.filter(c => c.command === 'append_today_item').length, 0);
-  finishDelete({ items: ['First'] });
+  finishDelete({ items: [{id: `${new Date().getFullYear()}-01-01-0001`, text: 'First'}] });
   await settle();
   document.querySelector('.drawer__item-text').click();
   assert.equal(document.querySelector('.drawer__item-editor').value, 'First');
@@ -171,7 +176,7 @@ test('returning to Today cancels a pending historical load', async () => {
   picker.value = past;
   picker.dispatchEvent(new window.Event('change'));
   document.querySelector(`[data-date="${date}"]`).click();
-  finishRead({ date: past, items: ['Stale day'] });
+  finishRead({ date: past, items: [{id: `${past}-0001`, text: 'Stale day'}] });
   await settle();
   assert.equal(picker.value, date);
   assert.match(document.querySelector('#today-list').textContent, /Today entry/);
@@ -180,7 +185,7 @@ test('returning to Today cancels a pending historical load', async () => {
 test('a day rollover preserves the date and text of an unfinished edit', async () => {
   let reads = 0;
   const { type } = await app({ todayItems: ['New day'], onInvoke: command => {
-    if (command === 'get_today_items' && reads++ === 0) return { filename: `${past}.md`, items: ['Yesterday draft'] };
+    if (command === 'get_today_items' && reads++ === 0) return { filename: `${past}.md`, items: [{id: `${past}-0001`, text: 'Yesterday draft'}] };
   } });
   document.querySelector('.drawer__item-text').click();
   type(document.querySelector('.drawer__item-editor'), 'Still editing yesterday');
@@ -188,4 +193,26 @@ test('a day rollover preserves the date and text of an unfinished edit', async (
   await settle();
   assert.equal(document.querySelector('#history-date').value, past);
   assert.equal(document.querySelector('.drawer__item-editor').value, 'Still editing yesterday');
+});
+
+
+test('deletion addresses the stable entry ID and original text, not its position', async () => {
+  const { calls, date } = await app({todayItems: ['First', 'Second']});
+  document.querySelector('.drawer__item-delete').click();
+  await settle();
+  const deletion = calls.find(c => c.command === 'delete_item_for_date');
+  assert.deepEqual(deletion.args, {date, id: `${date}-0002`, expectedItem: 'Second'});
+});
+
+test('storage initialization failure is visible beside capture and prevents saving', async (t) => {
+  t.mock.method(console, 'error', () => {});
+  const {editor, type, calls} = await app({onInvoke: command => {
+    if (command === 'get_today_items') throw new Error('Unsupported storage schema version');
+  }});
+  type(editor, 'Keep this safe');
+  assert.match(document.querySelector('#capture-status').textContent, /storage.*unavailable/i);
+  assert.equal(document.querySelector('#save-capture').disabled, true);
+  editor.dispatchEvent(new window.KeyboardEvent('keydown', {key: 'Enter', metaKey: true}));
+  await settle();
+  assert.equal(calls.filter(c => c.command === 'append_today_item').length, 0);
 });

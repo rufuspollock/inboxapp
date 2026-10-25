@@ -16,6 +16,7 @@ const DAY_TILE_SIZE = 18;
 const DAY_TILE_GAP = 0;
 
 const state = {
+  ready: false,
   todayFilename: "",
   todayDate: "",
   todayItems: [],
@@ -52,7 +53,7 @@ function setDrawerState(open) {
 }
 
 function updateCaptureControls() {
-  saveCaptureEl.disabled = state.saving || state.itemSaving || !editorEl.value.trim();
+  saveCaptureEl.disabled = !state.ready || state.saving || state.itemSaving || !editorEl.value.trim();
   editorEl.readOnly = state.saving;
   saveCaptureEl.textContent = state.saving ? "Saving…" : "Save";
 }
@@ -122,11 +123,9 @@ function displayText(item) {
   return item.replace(/\s+/g, " ").trim();
 }
 
-function updateItemAt(index, item) {
-  state.viewItems[index] = item;
-  if (state.viewDate === state.todayDate) {
-    state.todayItems[index] = item;
-  }
+function updateItemAt(id, text) {
+  state.viewItems = state.viewItems.map(entry => entry.id === id ? {...entry, text} : entry);
+  if (state.viewDate === state.todayDate) state.todayItems = state.viewItems;
 }
 
 function setItemsForView(items) {
@@ -156,8 +155,8 @@ function dateFromFilename(filename) {
 function renderList() {
   listEl.textContent = "";
   const items = state.viewItems.slice().reverse();
-  items.forEach((item, position) => {
-    const index = state.viewItems.length - 1 - position;
+  items.forEach((entry) => {
+    const { id, text: item } = entry;
     const parsed = parseTaskItem(item);
     const row = document.createElement("li");
     row.className = "drawer__item";
@@ -165,7 +164,7 @@ function renderList() {
       row.classList.add("drawer__item--checked");
     }
 
-    if (state.editing?.date === state.viewDate && state.editing.index === index) {
+    if (state.editing?.date === state.viewDate && state.editing.id === id) {
       renderEditRow(row);
       listEl.append(row);
       return;
@@ -189,11 +188,11 @@ function renderList() {
       try {
         await invoke("update_item_for_date", {
           date: state.viewDate,
-          index,
+          id,
           item: updatedItem,
           expectedItem: item,
         });
-        updateItemAt(index, updatedItem);
+        updateItemAt(id, updatedItem);
         renderList();
         setError(null);
       } catch (error) {
@@ -221,7 +220,7 @@ function renderList() {
         return;
       }
       ++viewRequest;
-      state.editing = { date: state.viewDate, index, original: item, text: parsed.text, checked: parsed.checked };
+      state.editing = { date: state.viewDate, id, original: item, text: parsed.text, checked: parsed.checked };
       renderList();
       listEl.querySelector(".drawer__item-editor")?.focus();
     });
@@ -251,7 +250,8 @@ function renderList() {
       try {
         const updated = await invoke("delete_item_for_date", {
           date: state.viewDate,
-          index,
+          id,
+          expectedItem: item,
         });
         setItemsForView(updated.items);
         updateCount();
@@ -336,7 +336,7 @@ async function saveEditedItem() {
   renderList();
   try {
     const item = formatTaskItem(edit.text.replace(/\s+$/, ""), edit.checked);
-    const updated = await invoke("update_item_for_date", { date: edit.date, index: edit.index, item, expectedItem: edit.original });
+    const updated = await invoke("update_item_for_date", { date: edit.date, id: edit.id, item, expectedItem: edit.original });
     if (state.viewDate === edit.date) setItemsForView(updated.items);
     if (state.todayDate === edit.date) state.todayItems = updated.items;
     state.editing = null;
@@ -557,6 +557,7 @@ async function setViewDate(date) {
 }
 
 async function saveCapture() {
+  if (!state.ready) return;
   const rawText = editorEl.value;
   if (!rawText.trim()) {
     clearEditor();
@@ -574,10 +575,10 @@ async function saveCapture() {
   const trimmedText = rawText.replace(/\s+$/, "");
 
   try {
-    await invoke("append_today_item", {
+    const saved = await invoke("append_today_item", {
       text: trimmedText,
     });
-    state.todayItems.push(trimmedText);
+    state.todayItems.push(saved.entry);
     syncTodayCount();
 
     if (state.viewDate === state.todayDate) {
@@ -617,10 +618,13 @@ async function boot() {
   try {
     await loadTodayItems();
     await loadDayCounts();
+    state.ready = true;
+    updateCaptureControls();
     setDrawerState(false);
     focusEditor();
   } catch (error) {
     console.error("get_today_items failed", error);
+    captureStatusEl.textContent = `Storage unavailable — ${String(error.message || error)}. Restart after resolving this.`;
     setError("Load failed");
   }
 }
@@ -637,7 +641,7 @@ copyAllEl.addEventListener("click", () => {
   if (!state.viewItems.length) {
     return;
   }
-  const joined = formatMarkdownChecklist(state.viewItems, {
+  const joined = formatMarkdownChecklist(state.viewItems.map(entry => entry.text), {
     heading: todayHeading(),
   });
   copyText(joined);
@@ -648,7 +652,7 @@ historyDateEl.addEventListener("change", () => {
 });
 saveCaptureEl.addEventListener("click", saveCapture);
 editorEl.addEventListener("input", () => {
-  captureStatusEl.textContent = "";
+  if (state.ready) captureStatusEl.textContent = "";
   persistDraft();
 });
 window.addEventListener("focus", handleFocus);
