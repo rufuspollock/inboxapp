@@ -2,6 +2,12 @@
 
 Welcome to Beads! This repository uses **Beads** for issue tracking - a modern, AI-native tool designed to live directly in your codebase alongside your code.
 
+This repository syncs its embedded Dolt database with `bd dolt pull` and
+`bd dolt push`. JSONL auto-export is disabled and `issues.jsonl` is ignored;
+it is not the source of truth. The repository's pre-push hook also pushes
+Dolt data. Keep the tracked hooks enabled with
+`git config core.hooksPath .beads/hooks`.
+
 ## What is Beads?
 
 Beads is issue tracking that lives in your repo, making it perfect for AI coding agents and developers who want their issues close to their code. No web UI required - everything works through the CLI and integrates seamlessly with git.

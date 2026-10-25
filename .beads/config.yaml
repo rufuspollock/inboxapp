@@ -73,4 +73,4 @@
 
 sync.remote: "git+ssh://git@github.com/rufuspollock/inboxapp.git"
 export:
-    auto: true
+    auto: false

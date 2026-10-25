@@ -21,3 +21,7 @@ available, and consider a screenshot for visual work. Substantial announcements
 can use paragraphs or bullets. Omit internal implementation detail. For the
 first entry or when the format is unclear, fetch and follow
 https://raw.githubusercontent.com/life-itself/changelog/main/CONVENTION.md
+
+After writing a snippet, run `npm run build:site` and commit the generated
+`site/changelog/` output with it. `npm run check:site` checks freshness; see
+[website publishing](site/README.md). Release Please also maintains `CHANGELOG.md`.
