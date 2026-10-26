@@ -1,23 +1,28 @@
-const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
-const IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
+const MAX_FILE_BYTES = 20 * 1024 * 1024;
+
+function attachmentMarkdown(file) {
+  const label = file.name.replace(/[\\\[\]]/g, '\\$&').replace(/[\r\n]/g, ' ');
+  return `${file.is_image ? '!' : ''}[${label}](${file.path})`;
+}
 
 // Import first, then insert a link: failed writes never leave broken Markdown.
-export function installImageInput(field, {invoke, getId, isBusy, setBusy, onChange, onStatus}) {
+export function installAttachmentInput(field, {invoke, getId, isBusy, setBusy, onChange, onStatus}) {
   async function insert(load) {
     if (isBusy()) return;
     const start = field.selectionStart;
     const end = field.selectionEnd;
     const original = field.value;
     setBusy(true);
-    onStatus('Adding image…');
+    onStatus('Adding attachment…');
     try {
-      const text = await load();
+      const {text, error} = await load();
       onStatus('');
       if (text) {
         field.value = original.slice(0, start) + text + original.slice(end);
         field.setSelectionRange(start + text.length, start + text.length);
         onChange();
       }
+      if (error) onStatus(error);
     } catch (error) {
       onStatus(`Paste/import failed — ${String(error.message || error)}`);
     } finally {
@@ -27,41 +32,36 @@ export function installImageInput(field, {invoke, getId, isBusy, setBusy, onChan
   }
   async function paste() {
     return insert(async () => {
-      const path = await invoke('paste_image', {id: await getId()});
-      if (path) return `![Image](${path})`;
-      return await invoke('plugin:clipboard-manager|read_text') || '';
+      const result = await invoke('paste_attachments', {id: await getId()});
+      return {text: result.attachments.length ? result.attachments.map(attachmentMarkdown).join('\n') : result.text, error: result.error};
     });
   }
   async function importFile(file) {
-    if (!file || isBusy()) return;
-    if (!IMAGE_TYPES.has(file.type)) {
-      onStatus('Choose a PNG, JPEG, or WebP image.');
-      return;
-    }
-    if (file.size > MAX_IMAGE_BYTES) {
-      onStatus('Image is too large. Maximum size is 20 MB.');
-      return;
-    }
+    return importFiles(file ? [file] : []);
+  }
+  async function importFiles(files) {
+    if (!files.length || isBusy()) return;
     return insert(async () => {
-      const id = await getId();
-      const bytes = Array.from(new Uint8Array(await file.arrayBuffer()));
-      const path = await invoke('import_attachment', {id, bytes});
-      return `![Image](${path})`;
+      let id;
+      const links = [], errors = [];
+      for (const file of files) {
+        try {
+          if (file.size > MAX_FILE_BYTES) throw new Error('File exceeds the 20 MB limit.');
+          id ||= await getId();
+          const bytes = Array.from(new Uint8Array(await file.arrayBuffer()));
+          const imported = await invoke('import_file', {id, name:file.name || 'attachment', bytes});
+          links.push(attachmentMarkdown(imported));
+        } catch (error) { errors.push(`${file.name || 'File'}: ${String(error.message || error)}`); }
+      }
+      return {text:links.join('\n'), error:errors.join(' ')};
     });
   }
   field.addEventListener('paste', event => {
     if (isBusy()) {event.preventDefault(); return;}
     const files = Array.from(event.clipboardData?.files || []);
-    if (files.length) {
-      event.preventDefault();
-      if (files.length > 1) onStatus('Paste one image at a time.');
-      else importFile(files[0]);
-    } else if (!event.clipboardData?.getData('text/plain')) {
-      // macOS Edit > Paste may expose image bytes only through the native clipboard.
-      event.preventDefault();
-      paste();
-    }
-    // Ordinary text keeps the textarea's normal paste behavior (and input event).
+    event.preventDefault();
+    if (files.length) importFiles(files);
+    else paste();
   });
   field.addEventListener('keydown', event => {
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'v') {
@@ -70,34 +70,56 @@ export function installImageInput(field, {invoke, getId, isBusy, setBusy, onChan
       paste();
     }
   });
-  return {paste, importFile};
+  return {paste, importFile, importFiles};
+}
+
+function attachments(text, id) {
+  if (!id) return [];
+  const files = [];
+  for (const match of text.matchAll(/(!?)\[((?:\\.|[^\]\\\n])*)\]\((assets\/[a-z0-9-]+\/[a-zA-Z0-9._-]+)\)/g)) {
+    const path = match[3];
+    if (path.startsWith(`assets/${id}/`) && !files.some(file => file.path === path)) {
+      files.push({path, name:match[2].replace(/\\(.)/g, '$1') || path.split('/').at(-1), is_image:!!match[1]});
+    }
+  }
+  return files;
 }
 
 export function attachmentPaths(text, id) {
-  if (!id) return [];
-  const paths = [];
-  for (const match of text.matchAll(/!\[[^\]\n]*\]\((assets\/[a-z0-9-]+\/[a-zA-Z0-9._-]+)\)/g)) {
-    if (match[1].startsWith(`assets/${id}/`) && !paths.includes(match[1])) paths.push(match[1]);
-  }
-  return paths;
+  return attachments(text, id).map(file => file.path);
 }
 
 export async function renderPreviews(container, text, id, invoke) {
-  const paths = attachmentPaths(text, id);
-  const signature = JSON.stringify(paths);
+  const files = attachments(text, id);
+  const signature = JSON.stringify(files);
   if (container.previewSignature === signature) return;
   container.previewSignature = signature;
   const revision = {};
   container.previewRevision = revision;
   container.replaceChildren();
-  for (const path of paths) {
+  for (const {path, name, is_image} of files) {
     const document = container.ownerDocument;
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'attachment-preview';
-    button.title = 'View image';
-    button.setAttribute('aria-label', 'View attached image');
+    button.title = is_image ? 'View image' : `Open ${name}`;
+    button.setAttribute('aria-label', is_image ? 'View attached image' : `Open attached file ${name}`);
     container.append(button);
+    if (!is_image) {
+      button.classList.add('attachment-file');
+      button.textContent = name;
+      button.addEventListener('click', async () => {
+        button.disabled = true;
+        try {
+          await invoke('open_attachment', {id, path});
+          button.textContent = name;
+        } catch (error) {
+          button.textContent = `Could not open ${name}`;
+          button.title = String(error.message || error);
+        } finally { button.disabled = false; }
+      });
+      continue;
+    }
     try {
       const url = await invoke('read_attachment', {id, path});
       if (container.previewRevision !== revision) return;
@@ -126,11 +148,11 @@ export async function renderPreviews(container, text, id, invoke) {
   }
 }
 
-export function imagePicker(document, onFile) {
+export function attachmentPicker(document, onFile) {
   const input = document.createElement('input');
   input.type = 'file';
-  input.accept = 'image/png,image/jpeg,image/webp';
+  input.multiple = true;
   input.hidden = true;
-  input.addEventListener('change', () => {onFile(input.files?.[0]); input.value = '';});
+  input.addEventListener('change', () => {onFile(Array.from(input.files || [])); input.value = '';});
   return input;
 }

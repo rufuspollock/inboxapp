@@ -3761,9 +3761,13 @@ dependencies = [
 name = "tauri-app"
 version = "0.2.4"
 dependencies = [
+ "arboard",
  "base64 0.22.1",
  "chrono",
  "image",
+ "objc2",
+ "objc2-app-kit",
+ "objc2-foundation",
  "serde",
  "serde_json",
  "serde_yaml",

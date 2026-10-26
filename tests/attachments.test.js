@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
-import { installImageInput, attachmentPaths, renderPreviews } from '../src/attachments.js';
+import { installAttachmentInput, attachmentPaths, renderPreviews } from '../src/attachments.js';
 
 function fixture(invoke) {
   const dom = new JSDOM('<textarea></textarea><div id="previews"></div>');
@@ -11,7 +11,7 @@ function fixture(invoke) {
   let busy = false;
   const statuses = [];
   let changes = 0;
-  const controls = installImageInput(field, {
+  const controls = installAttachmentInput(field, {
     invoke, getId: async () => '2026-10-25-0001', isBusy: () => busy,
     setBusy: value => { busy = value; field.readOnly = value; },
     onChange: () => changes++, onStatus: text => statuses.push(text),
@@ -23,7 +23,7 @@ test('image paste inserts a portable link at the cursor after durable import', a
   const calls = [];
   const f = fixture(async (command, args) => {
     calls.push({command, args});
-    if (command === 'paste_image') return 'assets/2026-10-25-0001/image-1.png';
+    if (command === 'paste_attachments') return pastedImage('assets/2026-10-25-0001/image-1.png');
   });
   await f.controls.paste();
   assert.equal(f.field.value, 'Before ![Image](assets/2026-10-25-0001/image-1.png)after');
@@ -33,7 +33,7 @@ test('image paste inserts a portable link at the cursor after durable import', a
 });
 
 test('ordinary clipboard text remains text and replaces selected text', async () => {
-  const f = fixture(async command => command === 'paste_image' ? null : 'plain text');
+  const f = fixture(async () => ({attachments:[], text:'plain text', error:null}));
   f.field.setSelectionRange(0, 6);
   await f.controls.paste();
   assert.equal(f.field.value, 'plain text after');
@@ -58,14 +58,12 @@ test('pending image import blocks repeated paste until complete', async () => {
   assert.equal(f.busy(), true);
   await f.controls.paste();
   assert.equal(calls, 1);
-  done('assets/2026-10-25-0001/image-1.png');
+  done(pastedImage('assets/2026-10-25-0001/image-1.png'));
   await pending;
 });
 
-test('image picker validates size/type before reading bytes', async () => {
+test('attachment picker validates size before reading bytes', async () => {
   const f = fixture(async () => {throw new Error('must not import');});
-  await f.controls.importFile({type: 'text/html', size: 1});
-  assert.match(f.statuses.at(-1), /PNG.*JPEG.*WebP/);
   await f.controls.importFile({type: 'image/png', size: 21 * 1024 * 1024});
   assert.match(f.statuses.at(-1), /20 MB/);
 });
@@ -82,7 +80,7 @@ test('previews only read images owned by the entry; external URLs stay inert', a
 });
 
 test('menu Paste falls back to native image import when WebKit exposes no clipboard files', async () => {
-  const f = fixture(async command => command === 'paste_image' ? 'assets/2026-10-25-0001/image-1.png' : '');
+  const f = fixture(async command => command === 'paste_attachments' ? pastedImage('assets/2026-10-25-0001/image-1.png') : '');
   const event = new f.dom.window.Event('paste', {cancelable:true});
   Object.defineProperty(event, 'clipboardData', {value:{files:[], getData:()=>''}});
   f.field.dispatchEvent(event);
@@ -102,4 +100,44 @@ test('typing beside unchanged image links does not repeatedly decode the same pr
   assert.equal(reads, 1);
   await renderPreviews(container, 'Removed link', '2026-10-25-0001', invoke);
   assert.equal(container.querySelectorAll('img').length, 0);
+});
+
+function pastedImage(path) { return {attachments:[{path, name:'Image', is_image:true}], text:'', error:null}; }
+
+test('PDF paste inserts a named portable file link and retains native partial-success error', async () => {
+  const f = fixture(async () => ({attachments:[{path:'assets/2026-10-25-0001/report.pdf', name:'Report [final].pdf', is_image:false}], text:'', error:'large.zip exceeds 20 MB'}));
+  await f.controls.paste();
+  assert.equal(f.field.value, 'Before [Report \\[final\\].pdf](assets/2026-10-25-0001/report.pdf)after');
+  assert.match(f.statuses.at(-1), /large.zip/);
+  assert.equal(f.changes(), 1);
+});
+
+test('picker accepts unknown and empty files and keeps successful links when another file fails', async () => {
+  const calls = [];
+  const f = fixture(async (command, args) => {
+    calls.push({command,args});
+    if (args.name === 'bad.bin') throw new Error('Disk full');
+    return {path:`assets/2026-10-25-0001/${args.name}`, name:args.name, is_image:false};
+  });
+  const file = (name, bytes) => ({name, size:bytes.length, type:'', arrayBuffer:async () => Uint8Array.from(bytes).buffer});
+  await f.controls.importFiles([file('empty', []), file('bad.bin', [1]), file('data.xyz', [0,255])]);
+  assert.equal(calls[0].command, 'import_file');
+  assert.deepEqual(calls.at(-1).args.bytes, [0,255]);
+  assert.match(f.field.value, /\[empty\].*\n\[data.xyz\]/);
+  assert.doesNotMatch(f.field.value, /bad.bin/);
+  assert.match(f.statuses.at(-1), /bad.bin.*Disk full/);
+});
+
+test('generic attachment button opens only its owned file without embedding document bytes', async () => {
+  const f = fixture(async () => {});
+  const container = f.dom.window.document.querySelector('#previews');
+  const calls = [];
+  const text = '[report.pdf](assets/2026-10-25-0001/report.pdf) [outside](assets/2026-10-25-0002/no.pdf) [remote](https://example.com/a.pdf)';
+  await renderPreviews(container, text, '2026-10-25-0001', async (command,args) => {calls.push({command,args});});
+  assert.equal(container.querySelectorAll('button').length, 1);
+  assert.equal(container.querySelectorAll('img,iframe,object').length, 0);
+  assert.equal(container.textContent, 'report.pdf');
+  container.querySelector('button').click();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(calls, [{command:'open_attachment', args:{id:'2026-10-25-0001', path:'assets/2026-10-25-0001/report.pdf'}}]);
 });

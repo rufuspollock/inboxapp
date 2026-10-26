@@ -1,4 +1,5 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
+mod clipboard;
 mod storage;
 
 #[cfg(test)]
@@ -6,7 +7,7 @@ mod storage_tests;
 
 use serde::Serialize;
 use tauri::{image::Image, menu::Menu, tray::TrayIconEvent, Manager, Wry};
-use tauri_plugin_clipboard_manager::ClipboardExt;
+use tauri_plugin_opener::OpenerExt;
 
 static STORAGE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
@@ -22,6 +23,145 @@ struct SavedEntry {
     entry: storage::Entry,
     date: String,
     counts: storage::Counts,
+}
+
+#[derive(Debug, Serialize)]
+struct PasteResult {
+    attachments: Vec<storage::Attachment>,
+    text: String,
+    error: Option<String>,
+}
+
+fn import_contents(
+    root: &std::path::Path,
+    id: &str,
+    contents: clipboard::Contents,
+) -> std::io::Result<PasteResult> {
+    let mut result = PasteResult {
+        attachments: Vec::new(),
+        text: String::new(),
+        error: None,
+    };
+    let image_bytes = match contents {
+        clipboard::Contents::Files(files) => {
+            let mut errors = Vec::new();
+            for source in files {
+                match storage::import_file_path(root, id, &source) {
+                    Ok(attachment) => result.attachments.push(attachment),
+                    Err(error) => errors.push(format!(
+                        "{}: {error}",
+                        source.file_name().unwrap_or_default().to_string_lossy()
+                    )),
+                }
+            }
+            if !errors.is_empty() {
+                result.error = Some(errors.join("; "));
+            }
+            return Ok(result);
+        }
+        clipboard::Contents::Text(text) => {
+            result.text = text;
+            return Ok(result);
+        }
+        clipboard::Contents::Empty => return Ok(result),
+        clipboard::Contents::Png(bytes) => bytes,
+        clipboard::Contents::Image {
+            width,
+            height,
+            rgba,
+        } => storage::encode_clipboard_image(width, height, rgba)?,
+    };
+    let path = storage::import_attachment(root, id, &image_bytes)?;
+    result.attachments.push(storage::Attachment {
+        path,
+        name: "Image".into(),
+        is_image: true,
+    });
+    Ok(result)
+}
+
+#[cfg(test)]
+mod paste_tests {
+    use super::*;
+
+    #[test]
+    fn file_batch_keeps_successes_and_reports_failures_without_touching_sources() {
+        let root = tempfile::tempdir().unwrap();
+        let source = tempfile::tempdir().unwrap();
+        storage::initialize(root.path()).unwrap();
+        let id = storage::reserve_entry_id(root.path(), "2026-10-26").unwrap();
+        let pdf = source.path().join("document.pdf");
+        let missing = source.path().join("missing.file");
+        let binary = source.path().join("unknown.asset");
+        std::fs::write(&pdf, b"%PDF-test").unwrap();
+        std::fs::write(&binary, [0, 255, 1]).unwrap();
+        let result = import_contents(
+            root.path(),
+            &id,
+            clipboard::Contents::Files(vec![pdf.clone(), missing, binary.clone()]),
+        )
+        .unwrap();
+        assert_eq!(result.attachments.len(), 2);
+        assert!(result.error.unwrap().contains("missing.file"));
+        assert!(result.text.is_empty());
+        for (attachment, original) in result.attachments.iter().zip([pdf, binary]) {
+            assert!(!attachment.is_image);
+            assert_eq!(
+                std::fs::read(root.path().join(&attachment.path)).unwrap(),
+                std::fs::read(original).unwrap()
+            );
+        }
+    }
+
+    #[test]
+    fn pixel_and_png_clipboards_produce_durable_validated_image_attachments() {
+        let root = tempfile::tempdir().unwrap();
+        storage::initialize(root.path()).unwrap();
+        let id = storage::reserve_entry_id(root.path(), "2026-10-26").unwrap();
+        let png = storage::encode_clipboard_image(1, 1, vec![255, 0, 0, 255]).unwrap();
+        for contents in [
+            clipboard::Contents::Image {
+                width: 1,
+                height: 1,
+                rgba: vec![255, 0, 0, 255],
+            },
+            clipboard::Contents::Png(png),
+        ] {
+            let result = import_contents(root.path(), &id, contents).unwrap();
+            assert_eq!(result.attachments.len(), 1);
+            assert!(result.attachments[0].is_image);
+            assert!(
+                storage::read_attachment(root.path(), &id, &result.attachments[0].path)
+                    .unwrap()
+                    .starts_with("data:image/png;base64,")
+            );
+            assert!(result.error.is_none());
+        }
+        assert!(import_contents(
+            root.path(),
+            &id,
+            clipboard::Contents::Png(b"not a PNG".to_vec())
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn text_and_empty_clipboards_do_not_create_assets() {
+        let root = tempfile::tempdir().unwrap();
+        let result = import_contents(
+            root.path(),
+            "unused",
+            clipboard::Contents::Text("selection replacement".into()),
+        )
+        .unwrap();
+        assert_eq!(result.text, "selection replacement");
+        assert!(result.attachments.is_empty());
+        let empty = import_contents(root.path(), "unused", clipboard::Contents::Empty).unwrap();
+        assert!(empty.attachments.is_empty());
+        assert!(empty.text.is_empty());
+        assert!(empty.error.is_none());
+        assert_eq!(std::fs::read_dir(root.path()).unwrap().count(), 0);
+    }
 }
 
 fn with_storage<T>(
@@ -192,9 +332,13 @@ fn delete_item_for_date(
 }
 
 #[tauri::command]
-async fn import_attachment(id: String, bytes: Vec<u8>) -> Result<String, String> {
+async fn import_file(
+    id: String,
+    name: String,
+    bytes: Vec<u8>,
+) -> Result<storage::Attachment, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        with_storage(|root| storage::import_attachment(root, &id, &bytes))
+        with_storage(|root| storage::import_file(root, &id, &name, &bytes))
     })
     .await
     .map_err(|e| e.to_string())?
@@ -210,16 +354,25 @@ async fn read_attachment(id: String, path: String) -> Result<String, String> {
 }
 
 #[tauri::command]
-async fn paste_image(app: tauri::AppHandle, id: String) -> Result<Option<String>, String> {
+async fn paste_attachments(id: String) -> Result<PasteResult, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        let image = match app.clipboard().read_image() {
-            Ok(image) => image,
-            Err(error) if error.to_string() == "The clipboard contents were not available in the requested format or the clipboard is empty." => return Ok(None),
-            Err(error) => return Err(format!("Cannot read clipboard image: {error}")),
-        };
-        let bytes = storage::encode_clipboard_image(image.width(), image.height(), image.rgba().to_vec()).map_err(|e| e.to_string())?;
-        with_storage(|root| storage::import_attachment(root, &id, &bytes)).map(Some)
-    }).await.map_err(|e| e.to_string())?
+        let contents = clipboard::read()?;
+        with_storage(|root| import_contents(root, &id, contents))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn open_attachment(app: tauri::AppHandle, id: String, path: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let owned = with_storage(|root| storage::resolve_attachment(root, &id, &path))?;
+        app.opener()
+            .open_path(owned.to_string_lossy().into_owned(), None::<&str>)
+            .map_err(|error| format!("Cannot open attachment: {error}"))
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -252,9 +405,10 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
-            import_attachment,
+            import_file,
             read_attachment,
-            paste_image,
+            paste_attachments,
+            open_attachment,
             new_entry_id,
             discard_draft,
             get_today_items,

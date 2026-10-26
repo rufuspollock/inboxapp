@@ -370,6 +370,151 @@ fn saving_and_editing_reject_another_entries_owned_image_links() {
     );
 }
 
+#[test]
+fn arbitrary_files_preserve_bytes_names_and_collisions() {
+    let root = tempdir().unwrap();
+    initialize(root.path()).unwrap();
+    let id = reserve_entry_id(root.path(), DATE).unwrap();
+    for (name, bytes) in [
+        ("report [final].pdf", b"%PDF-test".as_slice()),
+        ("data.unknown", &[0, 255, 1]),
+        ("empty", &[]),
+    ] {
+        let first = import_file(root.path(), &id, name, bytes).unwrap();
+        let second = import_file(root.path(), &id, name, bytes).unwrap();
+        assert_ne!(first.path, second.path);
+        assert_eq!(first.name, name);
+        assert!(!first.is_image);
+        assert_eq!(
+            fs::read(resolve_attachment(root.path(), &id, &first.path).unwrap()).unwrap(),
+            bytes
+        );
+        assert_eq!(fs::read(root.path().join(second.path)).unwrap(), bytes);
+        if name.ends_with(".pdf") {
+            assert!(first.path.ends_with(".pdf"));
+        }
+    }
+}
+
+#[test]
+fn arbitrary_import_limits_and_names_cannot_escape_owned_folder() {
+    let root = tempdir().unwrap();
+    initialize(root.path()).unwrap();
+    let id = reserve_entry_id(root.path(), DATE).unwrap();
+    assert!(import_file(root.path(), &id, "big.pdf", &vec![0; 20 * 1024 * 1024 + 1]).is_err());
+    assert!(import_file(root.path(), "2026-10-25-9999", "x", b"x").is_err());
+    for name in [
+        "../../escape.pdf",
+        ".",
+        "",
+        "a\\b\n[x](y).pdf",
+        "résumé.pdf",
+    ] {
+        let file = import_file(root.path(), &id, name, b"contents").unwrap();
+        let path = resolve_attachment(root.path(), &id, &file.path).unwrap();
+        assert_eq!(path.parent().unwrap(), root.path().join("assets").join(&id));
+    }
+}
+
+#[test]
+fn generic_assets_survive_unlink_and_move_with_entry_or_discard() {
+    let root = tempdir().unwrap();
+    initialize(root.path()).unwrap();
+    let id = reserve_entry_id(root.path(), DATE).unwrap();
+    let file = import_file(root.path(), &id, "report.pdf", b"%PDF-test").unwrap();
+    let text = format!("[report.pdf]({})", file.path);
+    append_entry(root.path(), DATE, &text, Some(&id)).unwrap();
+    update_entry(root.path(), DATE, &id, "link removed", &text).unwrap();
+    assert!(resolve_attachment(root.path(), &id, &file.path).is_ok());
+    delete_entry(root.path(), DATE, &id, "link removed").unwrap();
+    assert_eq!(
+        fs::read(root.path().join(".trash").join(&id).join(&file.path)).unwrap(),
+        b"%PDF-test"
+    );
+    let draft = reserve_entry_id(root.path(), DATE).unwrap();
+    let unsaved = import_file(root.path(), &draft, "data.bin", b"bytes").unwrap();
+    discard_draft(root.path(), &draft).unwrap();
+    assert!(!root.path().join(unsaved.path).exists());
+}
+
+#[cfg(unix)]
+#[test]
+fn generic_asset_access_refuses_symlinks_traversal_and_other_owners() {
+    let root = tempdir().unwrap();
+    let outside = tempdir().unwrap();
+    initialize(root.path()).unwrap();
+    let id = reserve_entry_id(root.path(), DATE).unwrap();
+    let other = reserve_entry_id(root.path(), DATE).unwrap();
+    let file = import_file(root.path(), &id, "with_under_score.pdf", b"%PDF").unwrap();
+    assert!(resolve_attachment(root.path(), &other, &file.path).is_err());
+    assert!(resolve_attachment(root.path(), &id, "../../config.yml").is_err());
+    assert!(append_entry(
+        root.path(),
+        DATE,
+        &format!("[pdf]({})", file.path),
+        Some(&other)
+    )
+    .is_err());
+    fs::write(outside.path().join("secret.pdf"), b"external").unwrap();
+    let local = root.path().join(&file.path);
+    fs::remove_file(&local).unwrap();
+    std::os::unix::fs::symlink(outside.path().join("secret.pdf"), &local).unwrap();
+    assert!(resolve_attachment(root.path(), &id, &file.path).is_err());
+}
+
+#[test]
+fn generic_image_import_keeps_bytes_and_preview_compatibility() {
+    let root = tempdir().unwrap();
+    initialize(root.path()).unwrap();
+    let id = reserve_entry_id(root.path(), DATE).unwrap();
+    let bytes = test_png();
+    let file = import_file(root.path(), &id, "screen_shot.png", &bytes).unwrap();
+    assert!(file.is_image);
+    assert_eq!(fs::read(root.path().join(&file.path)).unwrap(), bytes);
+    assert!(read_attachment(root.path(), &id, &file.path)
+        .unwrap()
+        .starts_with("data:image/png;base64,"));
+}
+
+#[test]
+fn long_file_names_keep_their_extension() {
+    let root = tempdir().unwrap();
+    initialize(root.path()).unwrap();
+    let id = reserve_entry_id(root.path(), DATE).unwrap();
+    let file = import_file(
+        root.path(),
+        &id,
+        &format!("{}.pdf", "x".repeat(240)),
+        b"%PDF",
+    )
+    .unwrap();
+    assert!(file.path.ends_with(".pdf"));
+}
+
+#[cfg(unix)]
+#[test]
+fn path_import_copies_regular_files_and_rejects_directories_symlinks_and_oversize() {
+    let root = tempdir().unwrap();
+    let source = tempdir().unwrap();
+    initialize(root.path()).unwrap();
+    let id = reserve_entry_id(root.path(), DATE).unwrap();
+    let pdf = source.path().join("report.pdf");
+    fs::write(&pdf, b"%PDF").unwrap();
+    let file = import_file_path(root.path(), &id, &pdf).unwrap();
+    fs::write(&pdf, b"changed").unwrap();
+    assert_eq!(fs::read(root.path().join(file.path)).unwrap(), b"%PDF");
+    let link = source.path().join("symlink.pdf");
+    std::os::unix::fs::symlink(&pdf, &link).unwrap();
+    assert!(import_file_path(root.path(), &id, &link).is_err());
+    assert!(import_file_path(root.path(), &id, source.path()).is_err());
+    let large = source.path().join("large.bin");
+    fs::File::create(&large)
+        .unwrap()
+        .set_len(20 * 1024 * 1024 + 1)
+        .unwrap();
+    assert!(import_file_path(root.path(), &id, &large).is_err());
+}
+
 #[cfg(unix)]
 #[test]
 fn delete_and_discard_refuse_symlink_asset_parent_without_touching_external_data() {

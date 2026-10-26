@@ -13,6 +13,12 @@ pub struct Entry {
     pub id: String,
     pub text: String,
 }
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+pub struct Attachment {
+    pub path: String,
+    pub name: String,
+    pub is_image: bool,
+}
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Counts {
     pub current: usize,
@@ -616,7 +622,7 @@ fn validate_asset_ownership(id: &str, text: &str) -> io::Result<()> {
     for remainder in text.split("assets/").skip(1) {
         if let Some((owner, _)) = remainder.split_once('/') {
             if id_date(owner).is_ok() && owner != id {
-                return Err(invalid("This image belongs to another entry. Attach a copy of the image to this entry instead."));
+                return Err(invalid("This attachment belongs to another entry. Attach a copy to this entry instead."));
             }
         }
     }
@@ -679,8 +685,88 @@ pub fn import_attachment(root: &Path, id: &str, bytes: &[u8]) -> io::Result<Stri
     }
 }
 
-pub fn read_attachment(root: &Path, id: &str, relative: &str) -> io::Result<String> {
-    use base64::Engine;
+pub fn import_file(root: &Path, id: &str, name: &str, bytes: &[u8]) -> io::Result<Attachment> {
+    if bytes.len() > MAX_IMAGE_BYTES {
+        return Err(invalid("File exceeds the 20 MB limit"));
+    }
+    let directory = owned_asset_dir(root, id, true)?;
+    let safe: String = name
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.') {
+                c
+            } else {
+                '-'
+            }
+        })
+        .collect();
+    let safe = safe.trim_matches('.');
+    let safe = if safe.is_empty() { "attachment" } else { safe };
+    let safe = if safe.len() > 180 {
+        match safe.rsplit_once('.') {
+            Some((stem, extension)) if extension.len() < 80 => format!(
+                "{}.{}",
+                &stem[..(179 - extension.len()).min(stem.len())],
+                extension
+            ),
+            _ => safe[..180].to_string(),
+        }
+    } else {
+        safe.to_string()
+    };
+    let safe = safe.as_str();
+    let (stem, extension) = match safe.rsplit_once('.') {
+        Some((stem, extension)) => (stem, format!(".{extension}")),
+        None => (safe, String::new()),
+    };
+    for sequence in 1u64.. {
+        let filename = if sequence == 1 {
+            safe.to_string()
+        } else {
+            format!("{stem}-{sequence}{extension}")
+        };
+        match atomic_write(&directory.join(&filename), bytes, false) {
+            Ok(()) => {
+                return Ok(Attachment {
+                    path: format!("assets/{id}/{filename}"),
+                    name: if name.is_empty() {
+                        "attachment".into()
+                    } else {
+                        name.into()
+                    },
+                    is_image: validate_image(bytes).is_ok(),
+                })
+            }
+            Err(e) if e.kind() == io::ErrorKind::AlreadyExists => continue,
+            Err(e) => return Err(e),
+        }
+    }
+    Err(invalid("Too many attachments"))
+}
+
+pub fn import_file_path(root: &Path, id: &str, source: &Path) -> io::Result<Attachment> {
+    use std::io::Read;
+    let metadata = fs::symlink_metadata(source)?;
+    if !metadata.is_file() || metadata.file_type().is_symlink() {
+        return Err(invalid(
+            "Choose regular files, not folders or symbolic links",
+        ));
+    }
+    if metadata.len() > MAX_IMAGE_BYTES as u64 {
+        return Err(invalid("File exceeds the 20 MB limit"));
+    }
+    let mut bytes = Vec::new();
+    fs::File::open(source)?
+        .take(MAX_IMAGE_BYTES as u64 + 1)
+        .read_to_end(&mut bytes)?;
+    let name = source
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("attachment");
+    import_file(root, id, name, &bytes)
+}
+
+pub fn resolve_attachment(root: &Path, id: &str, relative: &str) -> io::Result<PathBuf> {
     let directory = owned_asset_dir(root, id, false)?;
     let prefix = format!("assets/{id}/");
     let name = relative
@@ -691,7 +777,7 @@ pub fn read_attachment(root: &Path, id: &str, relative: &str) -> io::Result<Stri
         || name == ".."
         || !name
             .bytes()
-            .all(|c| c.is_ascii_alphanumeric() || c == b'-' || c == b'.')
+            .all(|c| c.is_ascii_alphanumeric() || c == b'-' || c == b'.' || c == b'_')
     {
         return Err(invalid("Invalid attachment path"));
     }
@@ -701,9 +787,16 @@ pub fn read_attachment(root: &Path, id: &str, relative: &str) -> io::Result<Stri
         || metadata.file_type().is_symlink()
         || metadata.len() > MAX_IMAGE_BYTES as u64
     {
-        return Err(invalid("Attachment must be a local image under 20 MB"));
+        return Err(invalid(
+            "Attachment must be a regular local file under 20 MB",
+        ));
     }
-    let bytes = fs::read(path)?;
+    Ok(path)
+}
+
+pub fn read_attachment(root: &Path, id: &str, relative: &str) -> io::Result<String> {
+    use base64::Engine;
+    let bytes = fs::read(resolve_attachment(root, id, relative)?)?;
     let (_, mime) = validate_image(&bytes)?;
     Ok(format!(
         "data:{mime};base64,{}",
