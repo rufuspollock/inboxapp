@@ -4,6 +4,13 @@
 - Edit entries from any day with Save/Cancel and a date picker for older journals.
 - Keep drafts and edits intact when a disk write fails.
 
+## [0.2.5](https://github.com/rufuspollock/inboxapp/compare/v0.2.4...v0.2.5) (2026-10-26)
+
+
+### Features
+
+* capture PDFs and other files as owned attachments ([#3](https://github.com/rufuspollock/inboxapp/issues/3)) ([b4d1763](https://github.com/rufuspollock/inboxapp/commit/b4d1763c535b8a780b9e9f46193de8f38678cdbd))
+
 ## [0.2.4](https://github.com/rufuspollock/inboxapp/compare/v0.2.3...v0.2.4) (2026-10-25)
 
 
