@@ -88,6 +88,9 @@ npm run dev
 cargo test --manifest-path src-tauri/Cargo.toml
 ```
 
+See [testing on macOS](docs/testing.md) for frontend tests, real clipboard and
+window automation, and verifying that the installed app matches the tested build.
+
 ### Project layout
 - `src/` - frontend (HTML/CSS/JS)
 - `src-tauri/` - backend (Rust/Tauri)
