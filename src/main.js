@@ -1,4 +1,4 @@
-import { installImageInput, renderPreviews, imagePicker } from "./attachments.js";
+import { installAttachmentInput, renderPreviews, attachmentPicker } from "./attachments.js";
 import {
   buildRecentDates,
   formatViewDate,
@@ -347,15 +347,15 @@ function renderEditRow(row) {
   const previews = document.createElement('div');
   previews.className = 'attachment-previews';
   renderPreviews(previews, edit.text, edit.id, invoke);
-  const imageInput = installImageInput(field, {
+  const imageInput = installAttachmentInput(field, {
     invoke, getId: async () => edit.id, isBusy: imageBusy, setBusy: setImageBusy,
     onChange: () => { edit.text = field.value; renderPreviews(previews, edit.text, edit.id, invoke); },
     onStatus: message => setError(message || null),
   });
-  const picker = imagePicker(document, imageInput.importFile);
+  const picker = attachmentPicker(document, imageInput.importFiles);
   const attach = document.createElement('button');
   attach.type = 'button';
-  attach.textContent = 'Attach image';
+  attach.textContent = 'Attach file';
   attach.disabled = state.itemSaving || state.importing;
   attach.addEventListener('click', () => picker.click());
   actions.append(attach, save, cancel);
@@ -490,7 +490,7 @@ function setImageBusy(busy) {
   state.importing = busy;
   updateCaptureControls();
   if (busy) {
-    listEl.querySelectorAll('button, input').forEach(element => {element.disabled = true;});
+    listEl.querySelectorAll('button:not(.attachment-preview), input').forEach(element => {element.disabled = true;});
     listEl.querySelectorAll('textarea').forEach(element => {element.readOnly = true;});
   } else if (state.editing) {
     const field = listEl.querySelector('.drawer__item-editor');
@@ -506,7 +506,7 @@ async function ensureDraftId() {
   const id = await invoke('new_entry_id');
   // Persist ownership before importing bytes; a recovered draft must find its images.
   try { window.localStorage.setItem(DRAFT_ID_KEY, id); }
-  catch { await invoke('discard_draft', {id}); throw new Error('Draft recovery unavailable. Restart before attaching images.'); }
+  catch { await invoke('discard_draft', {id}); throw new Error('Draft recovery unavailable. Restart before attaching files.'); }
   state.draftId = id;
   return id;
 }
@@ -721,11 +721,11 @@ editorEl.addEventListener("keydown", (event) => {
 
 });
 
-const captureImages = installImageInput(editorEl, {
+const captureImages = installAttachmentInput(editorEl, {
   invoke, getId: ensureDraftId, isBusy: imageBusy, setBusy: setImageBusy,
   onChange: persistDraft, onStatus: message => {captureStatusEl.textContent = message;},
 });
-const capturePicker = imagePicker(document, captureImages.importFile);
+const capturePicker = attachmentPicker(document, captureImages.importFiles);
 attachCaptureEl.after(capturePicker);
 attachCaptureEl.addEventListener('click', () => capturePicker.click());
 discardCaptureEl.addEventListener('click', discardCapture);

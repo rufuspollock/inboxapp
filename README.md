@@ -18,7 +18,7 @@ Background: [why capture and processing are separate](docs/background/capture-an
 - Explicit Save button or `⌘+Enter` to capture a thought into its own dated Markdown file.
 - Drafts stay put when switching apps and recover after restarting.
 - Click any saved entry to edit it with Save/Cancel; use the date picker to open older days.
-- Paste screenshots or attach PNG, JPEG, and WebP images, with small previews.
+- Paste screenshots or files copied in Finder, or attach any file up to 20 MB. PNG, JPEG, and WebP images show previews; other files open in their default app.
 - Local, offline storage in human-readable files at `~/.inboxapp`. Each entry owns its attachments.
 - Ultra-lightweight UI that resembles a blank page (black/white, minimalist).
 - Today’s item count shown in the native window title as `Inbox — N`.
@@ -117,7 +117,7 @@ Separators (`---`) inside new entries are ordinary Markdown, not entry boundarie
 ~/.inboxapp/
   config.yml                       # schema_version and next ID sequences
   2026-10-25-0001.md                # one entry
-  assets/2026-10-25-0001/           # images owned by that entry
+  assets/2026-10-25-0001/           # files owned by that entry
   .drafts/                         # reserved draft IDs
   .trash/2026-10-25-0001/           # deleted entry + its assets, as a bundle
   legacy-backup-v1/                # original daily files and migration manifest
@@ -131,24 +131,30 @@ it reports an error rather than overwriting anything. Keep the backup until you
 have verified your migrated entries. Do not run an older app version against the
 upgraded folder.
 
-Delete moves the entry and its own image folder into `.trash/<entry-id>/`, retaining
+Delete moves the entry and its own asset folder into `.trash/<entry-id>/`, retaining
 working relative links inside that bundle. Recovery is manual for now: move the
 Markdown file back to the storage root and its `assets/<entry-id>/` folder back
 under root `assets/`, without overwriting existing files. Permanently removing a
 trash bundle removes that entry's attachments too. Legacy trash remains in the
 migration backup.
 
-Images are written locally before their Markdown links are inserted. Screenshot
-clipboard data becomes PNG; PNG/JPEG/WebP files retain their bytes. Imports are
-limited to 20 MB and 40 million pixels. Draft text and its reserved entry ID recover
+Attachments are copied locally before their Markdown links are inserted. Screenshot
+clipboard data becomes PNG; files retain their original bytes and a safe version
+of their filename. Paste files copied in Finder or choose **Attach file**; multiple
+files are supported, and successful imports stay linked if another file fails.
+Any regular file type is accepted, including PDFs, archives, audio, and unknown
+extensions. Folders and symbolic links are rejected. Each file is limited to 20 MB;
+image previews and screenshot imports are limited to 40 million pixels. Other files
+appear as named buttons that open the owned copy in its default app.
+Draft text and its reserved entry ID recover
 across restarts; **Discard draft** removes its unsaved assets. Removing an image
-link or cancelling an edit keeps the entry's image files until the whole entry is
+link or cancelling an edit keeps the entry's files until the whole entry is
 deleted, so a cancelled edit cannot break an existing link.
 
 To move a thought elsewhere, copy its Markdown file **and** matching
 `assets/<entry-id>/` folder, preserving their relative layout. Copy and Copy all
-copy Markdown text only; they do not transfer image files. Pasting a copied entry’s
-image links into another entry is rejected on Save; attach a fresh copy so deleting
+copy Markdown text only; they do not transfer attached files. Pasting a copied entry’s
+attachment links into another entry is rejected on Save; attach a fresh copy so deleting
 the original cannot break it. Attachment-aware export
 is not yet implemented. See [the website changelog](https://tryinbox.app/changelog/)
 and [website publishing instructions](site/README.md).

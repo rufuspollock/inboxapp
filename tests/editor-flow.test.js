@@ -222,7 +222,7 @@ test('storage initialization failure is visible beside capture and prevents savi
 test('pasted image draft keeps its entry ID for save and shows a preview', async () => {
   const {editor, calls} = await app({onInvoke: (command, args) => {
     if (command === 'new_entry_id') return '2026-10-25-0008';
-    if (command === 'paste_image') return 'assets/2026-10-25-0008/image-1.png';
+    if (command === 'paste_attachments') return pastedImage('assets/2026-10-25-0008/image-1.png');
     if (command === 'read_attachment') return 'data:image/png;base64,aGVsbG8=';
   }});
   editor.dispatchEvent(new window.KeyboardEvent('keydown', {key: 'v', metaKey: true}));
@@ -239,7 +239,7 @@ test('pasted image draft keeps its entry ID for save and shows a preview', async
 test('discard removes draft attachments without creating an entry', async () => {
   const {editor, calls} = await app({onInvoke: command => {
     if (command === 'new_entry_id') return '2026-10-25-0008';
-    if (command === 'paste_image') return 'assets/2026-10-25-0008/image-1.png';
+    if (command === 'paste_attachments') return pastedImage('assets/2026-10-25-0008/image-1.png');
   }});
   editor.dispatchEvent(new window.KeyboardEvent('keydown', {key: 'v', metaKey: true}));
   await settle();
@@ -252,12 +252,12 @@ test('discard removes draft attachments without creating an entry', async () => 
 
 test('image import into an old entry targets its ID and cancel keeps the saved entry', async () => {
   const {calls} = await openPast({onInvoke: command => {
-    if (command === 'paste_image') return `assets/${past}-0001/image-1.png`;
+    if (command === 'paste_attachments') return pastedImage(`assets/${past}-0001/image-1.png`);
   }});
   const editor = document.querySelector('.drawer__item-editor');
   editor.dispatchEvent(new window.KeyboardEvent('keydown', {key: 'v', metaKey: true}));
   await settle();
-  assert.equal(calls.find(c => c.command === 'paste_image').args.id, `${past}-0001`);
+  assert.equal(calls.find(c => c.command === 'paste_attachments').args.id, `${past}-0001`);
   document.querySelector('.drawer__item-cancel').click();
   await settle();
   assert.equal(calls.filter(c => c.command === 'discard_draft').length, 0);
@@ -268,13 +268,13 @@ test('Command+Enter during first image import cannot clear its draft ownership',
   let finishPaste;
   const {editor, calls} = await app({onInvoke: command => {
     if (command === 'new_entry_id') return '2026-10-25-0008';
-    if (command === 'paste_image') return new Promise(resolve => {finishPaste = resolve;});
+    if (command === 'paste_attachments') return new Promise(resolve => {finishPaste = resolve;});
   }});
   editor.dispatchEvent(new window.KeyboardEvent('keydown', {key: 'v', metaKey: true}));
   await settle();
   editor.dispatchEvent(new window.KeyboardEvent('keydown', {key: 'Enter', metaKey: true}));
   assert.equal(window.localStorage.getItem('inboxapp.capture-draft-id'), '2026-10-25-0008');
-  finishPaste('assets/2026-10-25-0008/image-1.png');
+  finishPaste(pastedImage('assets/2026-10-25-0008/image-1.png'));
   await settle();
   document.querySelector('#save-capture').click();
   await settle();
@@ -282,7 +282,7 @@ test('Command+Enter during first image import cannot clear its draft ownership',
 });
 
 test('image paste keeps focus and caret in the existing entry editor', async () => {
-  await openPast({onInvoke: command => command === 'paste_image' ? `assets/${past}-0001/image-1.png` : undefined});
+  await openPast({onInvoke: command => command === 'paste_attachments' ? pastedImage(`assets/${past}-0001/image-1.png`) : undefined});
   const editor = document.querySelector('.drawer__item-editor');
   editor.setSelectionRange(0, 0);
   editor.dispatchEvent(new window.KeyboardEvent('keydown', {key: 'v', metaKey: true}));
@@ -294,7 +294,7 @@ test('image paste keeps focus and caret in the existing entry editor', async () 
 test('image paste does not hide a draft recovery storage failure', async (t) => {
   const {editor} = await app({onInvoke: command => {
     if (command === 'new_entry_id') return '2026-10-25-0008';
-    if (command === 'paste_image') return 'assets/2026-10-25-0008/image-1.png';
+    if (command === 'paste_attachments') return pastedImage('assets/2026-10-25-0008/image-1.png');
   }});
   const setItem = window.Storage.prototype.setItem;
   t.mock.method(window.Storage.prototype, 'setItem', function(key, value) {
@@ -335,4 +335,47 @@ test('a failed draft discard leaves its text and ownership available', async (t)
   assert.equal(editor.value, 'Keep me');
   assert.equal(window.localStorage.getItem('inboxapp.capture-draft-id'), '2026-10-25-0008');
   assert.match(document.querySelector('#capture-status').textContent, /Could not discard/);
+});
+
+function pastedImage(path) { return {attachments:[{path, name:'Image', is_image:true}], text:'', error:null}; }
+
+test('PDF paste recovers its owned draft and saves a named attachment control', async () => {
+  const id = `${past}-0008`;
+  const {editor} = await app({onInvoke: command => {
+    if (command === 'new_entry_id') return id;
+    if (command === 'paste_attachments') return {attachments:[{path:`assets/${id}/report.pdf`,name:'Report.pdf',is_image:false}],text:'',error:null};
+  }});
+  editor.dispatchEvent(new window.KeyboardEvent('keydown', {key:'v', metaKey:true}));
+  await settle();
+  const draft = window.localStorage.getItem('inboxapp.capture-draft');
+  assert.equal(window.localStorage.getItem('inboxapp.capture-draft-id'), id);
+  assert.match(draft, /\[Report.pdf\]/);
+  assert.equal(document.querySelector('#attach-capture').textContent, 'Attach file');
+  const {calls} = await app({draft, draftId:id, onInvoke: (command,args) => {
+    if (command === 'append_today_item') return {entry:{id,text:args.text},date:past,counts:{current:1}};
+  }});
+  const open = document.querySelector('#capture-previews button');
+  assert.equal(open.textContent, 'Report.pdf');
+  open.click();
+  await settle();
+  assert.deepEqual(calls.find(call => call.command === 'open_attachment').args, {id,path:`assets/${id}/report.pdf`});
+  document.querySelector('#save-capture').click();
+  await settle();
+  assert.equal(calls.find(call => call.command === 'append_today_item').args.id, id);
+  assert.equal(window.localStorage.getItem('inboxapp.capture-draft'), null);
+});
+
+test('existing attachment stays openable after text, empty or failed paste in an edit', async () => {
+  for (const kind of ['text', 'empty', 'failure']) {
+    await openPast({pastItems:[{id:`${past}-0001`,text:`Original [report.pdf](assets/${past}-0001/report.pdf)`}], onInvoke: command => {
+      if (command === 'paste_attachments') {
+        if (kind === 'failure') throw new Error('Clipboard unavailable');
+        return {attachments:[],text:kind === 'text' ? 'more text' : '',error:null};
+      }
+    }});
+    const field = document.querySelector('.drawer__item-editor');
+    field.dispatchEvent(new window.KeyboardEvent('keydown', {key:'v',metaKey:true}));
+    await settle();
+    assert.equal(document.querySelector('.attachment-file').disabled, false, kind);
+  }
 });

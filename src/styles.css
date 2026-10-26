@@ -413,6 +413,7 @@ body {
 .attachment-preview { border: 1px solid var(--divider); padding: 3px; margin: 4px 0; border-radius: 5px; background: transparent; color: var(--muted-ink); cursor: zoom-in; flex: 0 0 auto; font: inherit; font-size: 11px; }
 .attachment-preview img { display: block; height: 72px; max-width: 150px; object-fit: contain; }
 .attachment-preview:focus-visible { outline: 2px solid var(--accent); }
+.attachment-file { cursor: pointer; padding: 8px 10px; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; align-self: center; }
 .drawer__item-content { flex: 1; min-width: 0; }
 .drawer__item-content .drawer__item-text { display: block; width: 100%; }
 .drawer__item-content .attachment-preview img { height: 48px; max-width: 100px; }
